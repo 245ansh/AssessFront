@@ -13,6 +13,7 @@ import QuizSolution from '../pages/QuizSolution'
 import Features from '../pages/Features'
 import About from '../pages/About'
 import AssessmentAttempt from '../pages/AssessmentAttempt'
+import ResultPage from '../pages/ResultPage'
 const router = createBrowserRouter([
     {
         path: "/",
@@ -64,7 +65,12 @@ const router = createBrowserRouter([
          },{
             path:"/classroom/:classroomId/assessment/:assessmentId",
             element:<AssessmentAttempt/>
+         },
+         {
+            path: "/result",
+            element: <ResultPage />
          }
+
         ]
     }
 ])

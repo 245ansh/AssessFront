@@ -115,6 +115,9 @@ export const classroomService = {
         classCode: classroom.classCode || classroom.classroomCode, // for backward compatibility
         studentCount: classroom.studentCount || classroom.students?.length || 0,
         learningAssessmentEnabled: classroom.learningAssessmentEnabled || true,
+        assignments: classroom.assignments || [],
+        assignmentCount: classroom.assignments?.length || 0,
+        totalAssignments: classroom.totalAssignments || classroom.assignments?.length || 0,
       };
     } catch (error) {
       console.error("Error fetching classroom by ID:", error);

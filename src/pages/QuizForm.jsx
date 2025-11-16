@@ -1,329 +1,385 @@
-import { useState } from 'react';
-import { 
+import { useState, useEffect } from "react";
+import {
   ArrowLeft,
-  AlertCircle,
-  Save,
   Send,
   CheckCircle,
-  HelpCircle
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+  HelpCircle,
+} from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import axios from "axios";
 
 const QuizForm = () => {
   const navigate = useNavigate();
+  const { quizcode } = useParams();
+
+  const [questions, setQuestions] = useState([]);
+  const [testId, setTestId] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
 
-  const quiz = {
-    title: "Calculus Quiz 1",
-    description: "This quiz covers differentiation and basic integration techniques",
-    totalQuestions: 6,
-    questions: [
-      {
-        id: 1,
-        type: 'mcq',
-        question: 'What is the derivative of y = x²?',
-        options: ['y = 2x', 'y = x', 'y = 2x²', 'y = ½x²'],
-        correctOption: 0 // Index of correct answer
-      },
-      {
-        id: 2,
-        type: 'mcq',
-        question: 'Which of the following is the correct integration of 2x?',
-        options: ['x²', 'x² + C', '2x² + C', 'x² - C'],
-        correctOption: 1
-      },
-      {
-        id: 3,
-        type: 'paragraph',
-        question: 'Explain the chain rule and provide an example of its application.',
-      },
-      {
-        id: 4,
-        type: 'mcq',
-        question: 'What is the derivative of sin(x)?',
-        options: ['cos(x)', '-sin(x)', '-cos(x)', 'tan(x)'],
-        correctOption: 0
-      },
-      {
-        id: 5,
-        type: 'paragraph',
-        question: 'Describe the relationship between differentiation and integration. How are they inverse operations?',
-      },
-      {
-        id: 6,
-        type: 'mcq',
-        question: 'Which of the following is NOT a valid integration rule?',
-        options: [
-          '∫(f(x) + g(x))dx = ∫f(x)dx + ∫g(x)dx',
-          '∫kf(x)dx = k∫f(x)dx',
-          '∫(f(x)/g(x))dx = ∫f(x)dx/∫g(x)dx',
-          '∫x^n dx = (x^(n+1))/(n+1) + C'
-        ],
-        correctOption: 2
+  // -------------------------------------------------------------
+  // LOAD QUESTIONS + TEST ID
+  // -------------------------------------------------------------
+  useEffect(() => {
+  const loadQuestions = async () => {
+    try {
+      const res = await axios.get(
+        `http://localhost:2452/api/assignment/${quizcode}`
+      );
+
+      console.log("Loaded Assignment:", res.data);
+
+      if (res.data?.questions) {
+        setQuestions(res.data.questions);
       }
-    ]
+
+      // If backend returns test inside assignment (optional)
+      if (res.data?.test?.tid) {
+        setTestId(res.data.test.tid);
+      }
+
+    } catch (err) {
+      console.error("Error loading assignment:", err);
+    }
   };
 
-  const handleMCQAnswerChange = (questionId, option, optionIndex) => {
-    setAnswers(prev => ({
+  const loadTestId = async () => {
+    try {
+      const res = await axios.get(
+        `http://localhost:2452/api/assignment/test/${quizcode}`
+      );
+
+      console.log("Loaded Test ID:", res.data);
+      setTestId(res.data);
+
+    } catch (err) {
+      console.error("Error loading test ID:", err);
+    }
+  };
+
+  loadQuestions();
+  loadTestId(); // <- always call separately
+
+}, [quizcode]);
+
+
+  // -------------------------------------------------------------
+  // SAVE ANSWERS
+  // -------------------------------------------------------------
+  const handleMCQAnswerChange = (qid, selectedOption, index) => {
+    setAnswers((prev) => ({
       ...prev,
-      [questionId]: {
-        type: 'mcq',
-        selectedOption: option,
-        optionIndex: optionIndex
-      }
+      [qid]: {
+        type: "MCQ",
+        selectedOption,
+        optionIndex: index,
+      },
     }));
   };
 
-  const handleParagraphAnswerChange = (questionId, text) => {
-    setAnswers(prev => ({
+  const handleParagraphAnswerChange = (qid, text) => {
+    setAnswers((prev) => ({
       ...prev,
-      [questionId]: {
-        type: 'paragraph',
-        text: text
-      }
+      [qid]: {
+        type: "PARAGRAPH",
+        text,
+      },
     }));
   };
 
-  const goBack = () => {
-    navigate(-1);
+  // -------------------------------------------------------------
+  // BUILD PAYLOAD
+  // -------------------------------------------------------------
+  const buildFinalPayload = () => {
+    return questions.map((q) => {
+      const ans = answers[q.qid];
+
+      return {
+        questionId: q.qid,
+        answer:
+          ans?.type === "MCQ"
+            ? ans.selectedOption
+            : ans?.text || "",
+      };
+    });
   };
 
-  const handleSubmit = () => {
-    console.log('Submitting answers:', answers);
-    // Here you can see the different data structures for MCQs and paragraphs
-    navigate(-1);
+  // -------------------------------------------------------------
+  // SUBMIT -> EVALUATE
+  // -------------------------------------------------------------
+  const handleSubmitQuiz = async () => {
+    if (!testId) {
+      alert("Test ID not loaded yet!");
+      return;
+    }
+
+    const payload = buildFinalPayload();
+    console.log("Evaluation Payload:", payload);
+
+    try {
+      const res = await axios.post(
+        `http://localhost:2452/api/evaluate/${testId}`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      console.log("Evaluation Completed:", res.data);
+
+      navigate("/result", {
+        state: { result: res.data },
+      });
+
+    } catch (err) {
+      console.error("Evaluation Error:", err);
+      alert("Error during evaluation.");
+    }
   };
 
-  // Helper to check if a question has been answered
-  const isQuestionAnswered = (questionId) => {
-    return !!answers[questionId];
-  };
-  
-  // Check if all questions have been answered
-  const areAllQuestionsAnswered = () => {
-    return quiz.questions.every((_, index) => isQuestionAnswered(index + 1));
-  };
-  
-  // Determine if the submit button should be shown
-  const isLastQuestion = currentQuestion === quiz.totalQuestions - 1;
-  const canSubmit = isLastQuestion && areAllQuestionsAnswered();
-  
-  // Check for unanswered questions
-  const getUnansweredQuestions = () => {
-    return quiz.questions
-      .map((_, index) => index + 1)
-      .filter(questionId => !isQuestionAnswered(questionId));
-  };
+  // -------------------------------------------------------------
+  // HELPERS
+  // -------------------------------------------------------------
+  const isAnswered = (qid) => !!answers[qid];
 
+  const allAnswered = () =>
+    questions.every((q) => isAnswered(q.qid));
+
+  const totalQuestions = questions.length;
+  const currentQ = questions[currentQuestion];
+
+  if (!currentQ) {
+    return <div className="text-white p-10">Loading...</div>;
+  }
+
+  // -------------------------------------------------------------
+  // UI BELOW
+  // -------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-3 md:p-6">
-      {/* Confirmation Dialog */}
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-6">
+
+      {/* CONFIRM SUBMIT POPUP */}
       {showConfirmSubmit && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-          <div className="relative bg-slate-900 rounded-xl p-4 md:p-6 w-full max-w-md mx-4 border border-slate-800 shadow-xl">
-            <h3 className="text-lg md:text-xl font-bold text-cyan-400 mb-3 md:mb-4">Submit Quiz?</h3>
-            <p className="text-slate-300 text-sm md:text-base mb-4 md:mb-6">
-              Are you sure you want to submit your quiz? Make sure you have reviewed all your answers.
-              This action cannot be undone.
+
+          <div className="relative bg-slate-900 p-6 rounded-xl w-full max-w-md border border-slate-800">
+            <h3 className="text-xl font-bold text-cyan-400 mb-4">
+              Submit Quiz?
+            </h3>
+
+            <p className="text-slate-300 mb-5">
+              Once submitted, you cannot change your answers.
             </p>
-            <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:justify-end md:space-x-3">
+
+            <div className="flex justify-end gap-4">
               <button
                 onClick={() => setShowConfirmSubmit(false)}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors text-sm md:text-base order-2 md:order-1"
+                className="text-slate-300 hover:text-white"
               >
-                Review Answers
+                Review Again
               </button>
+
               <button
-                onClick={handleSubmit}
-                className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center text-sm md:text-base order-1 md:order-2"
+                onClick={handleSubmitQuiz}
+                className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg flex items-center"
               >
-                <Send className="mr-2 h-4 w-4" /> Submit Quiz
+                <Send className="mr-2 h-4 w-4" /> Submit
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 md:mb-6">
-        <div className="flex items-center">
-          <button 
-            onClick={goBack} 
-            className="bg-slate-800 p-1 md:p-2 rounded-full mr-2 md:mr-4 hover:bg-slate-700 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
-          </button>
-          <div>
-            <h1 className="text-lg md:text-2xl font-bold text-cyan-400 truncate">{quiz.title}</h1>
-            <p className="text-xs md:text-sm text-slate-400 hidden sm:block">{quiz.description}</p>
-          </div>
-        </div>
+      {/* HEADER */}
+      <div className="flex items-center mb-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="bg-slate-800 p-2 rounded-full mr-4 hover:bg-slate-700"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+
+        <h1 className="text-2xl font-bold text-cyan-400">
+          Assignment Quiz
+        </h1>
       </div>
 
-      {/* Progress Bar */}
-      <div className="bg-slate-800 rounded-full h-1.5 md:h-2 mb-4 md:mb-6">
-        <div 
-          className="bg-cyan-500 h-1.5 md:h-2 rounded-full transition-all duration-300"
-          style={{ width: `${((currentQuestion + 1) / quiz.totalQuestions) * 100}%` }}
+      {/* PROGRESS */}
+      <div className="bg-slate-800 rounded-full h-2 mb-6">
+        <div
+          className="bg-cyan-500 h-2 rounded-full"
+          style={{
+            width: `${((currentQuestion + 1) / totalQuestions) * 100}%`,
+          }}
         ></div>
       </div>
 
-      {/* Question Navigation */}
-      <div className="flex space-x-1 md:space-x-2 mb-4 md:mb-6 overflow-x-auto pb-2 scrollbar-hide">
-        {quiz.questions.map((_, index) => (
+      {/* QUESTION SELECTOR */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+        {questions.map((q, i) => (
           <button
-            key={index}
-            onClick={() => setCurrentQuestion(index)}
+            key={q.qid}
+            onClick={() => setCurrentQuestion(i)}
             className={`
-              flex items-center justify-center min-w-8 w-8 h-8 md:w-10 md:h-10 rounded-lg font-medium transition-colors flex-shrink-0
-              ${currentQuestion === index 
-                ? 'bg-cyan-600 text-white' 
-                : isQuestionAnswered(index + 1) 
-                  ? 'bg-slate-700 text-cyan-400' 
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              w-10 h-10 rounded-lg flex items-center justify-center transition
+              ${
+                i === currentQuestion
+                  ? "bg-cyan-600 text-white"
+                  : isAnswered(q.qid)
+                  ? "bg-slate-700 text-cyan-400"
+                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
               }
             `}
           >
-            {isQuestionAnswered(index + 1) ? <CheckCircle className="h-3 w-3 md:h-4 md:w-4" /> : index + 1}
+            {isAnswered(q.qid) ? (
+              <CheckCircle className="h-4 w-4" />
+            ) : (
+              i + 1
+            )}
           </button>
         ))}
       </div>
 
-      {/* Question Card */}
-      <div className="bg-slate-900 rounded-xl shadow-lg md:shadow-2xl p-4 md:p-6 border border-slate-800 mb-4 md:mb-6">
-        <div className="flex items-center justify-between mb-3 md:mb-4">
-          <span className="text-xs md:text-sm text-slate-400">Question {currentQuestion + 1} of {quiz.totalQuestions}</span>
-          <span className={`
-            px-2 py-0.5 md:px-3 md:py-1 rounded-full text-xs
-            ${quiz.questions[currentQuestion].type === 'mcq' 
-              ? 'bg-purple-900 text-purple-400' 
-              : 'bg-cyan-900 text-cyan-400'
-            }
-          `}>
-            {quiz.questions[currentQuestion].type === 'mcq' ? 'Multiple Choice' : 'Paragraph'}
+      {/* QUESTION CARD */}
+      <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6 shadow-xl">
+        <div className="flex justify-between mb-6">
+          <span className="text-slate-400">
+            Question {currentQuestion + 1} of {totalQuestions}
+          </span>
+
+          <span
+            className={`
+              px-3 py-1 rounded-full text-xs
+              ${
+                currentQ.type === "MCQ"
+                  ? "bg-purple-900 text-purple-400"
+                  : "bg-cyan-900 text-cyan-400"
+              }
+            `}
+          >
+            {currentQ.type === "MCQ" ? "Multiple Choice" : "Paragraph"}
           </span>
         </div>
 
-        <h2 className="text-base md:text-xl font-semibold mb-4 md:mb-6">{quiz.questions[currentQuestion].question}</h2>
+        <h2 className="text-xl font-semibold mb-6">{currentQ.text}</h2>
 
-        {quiz.questions[currentQuestion].type === 'mcq' ? (
-          <div className="space-y-2 md:space-y-3">
-            {quiz.questions[currentQuestion].options.map((option, index) => {
-              const currentAnswer = answers[currentQuestion + 1];
-              const isSelected = currentAnswer && currentAnswer.optionIndex === index;
-              
-              return (
-                <label 
-                  key={index}
-                  className={`
-                    block p-3 md:p-4 rounded-lg border-2 transition-all cursor-pointer text-sm md:text-base
-                    ${isSelected
-                      ? 'bg-cyan-900/50 border-cyan-500'
-                      : 'bg-slate-800 border-transparent hover:border-slate-600'
-                    }
-                  `}
-                >
-                  <input
-                    type="radio"
-                    name={`question-${currentQuestion}`}
-                    value={option}
-                    checked={isSelected}
-                    onChange={() => handleMCQAnswerChange(currentQuestion + 1, option, index)}
-                    className="hidden"
-                  />
-                  <div className="flex items-center">
-                    <div className={`
-                      w-4 h-4 md:w-5 md:h-5 rounded-full border-2 mr-2 md:mr-3 flex items-center justify-center
-                      ${isSelected
-                        ? 'border-cyan-500 bg-cyan-500'
-                        : 'border-slate-600'
+        {/* MCQ */}
+        {currentQ.type === "MCQ" && (
+          <div className="space-y-3">
+            {["option1", "option2", "option3", "option4"].map(
+              (opt, idx) => {
+                const text = currentQ.mcq[opt];
+                const selected =
+                  answers[currentQ.qid]?.optionIndex === idx;
+
+                return (
+                  <label
+                    key={idx}
+                    className={`
+                      block p-4 rounded-lg border-2 cursor-pointer
+                      ${
+                        selected
+                          ? "bg-cyan-900/50 border-cyan-500"
+                          : "bg-slate-800 border-transparent hover:border-slate-600"
                       }
-                    `}>
-                      {isSelected && (
-                        <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-white"></div>
-                      )}
+                    `}
+                  >
+                    <input
+                      type="radio"
+                      className="hidden"
+                      checked={selected}
+                      onChange={() =>
+                        handleMCQAnswerChange(currentQ.qid, text, idx)
+                      }
+                    />
+
+                    <div className="flex items-center">
+                      <div
+                        className={`
+                          w-5 h-5 mr-3 rounded-full border-2 flex justify-center items-center
+                          ${
+                            selected
+                              ? "border-cyan-500 bg-cyan-500"
+                              : "border-slate-600"
+                          }
+                        `}
+                      >
+                        {selected && (
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        )}
+                      </div>
+
+                      {text}
                     </div>
-                    <div className="flex-1">{option}</div>
-                  </div>
-                </label>
-              );
-            })}
+                  </label>
+                );
+              }
+            )}
           </div>
-        ) : (
+        )}
+
+        {/* PARAGRAPH */}
+        {currentQ.type === "PARAGRAPH" && (
           <textarea
-            value={answers[currentQuestion + 1]?.text || ''}
-            onChange={(e) => handleParagraphAnswerChange(currentQuestion + 1, e.target.value)}
-            className="w-full h-32 md:h-48 bg-slate-800 border border-slate-700 rounded-lg p-3 md:p-4 text-sm md:text-base text-white resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            placeholder="Type your answer here..."
+            className="w-full h-48 bg-slate-800 border border-slate-700 rounded-lg p-4 text-white focus:ring-2 focus:ring-cyan-500"
+            placeholder="Type your answer..."
+            value={answers[currentQ.qid]?.text || ""}
+            onChange={(e) =>
+              handleParagraphAnswerChange(currentQ.qid, e.target.value)
+            }
           />
         )}
       </div>
 
-      {/* Navigation Buttons */}
+      {/* NAVIGATION */}
       <div className="flex justify-between">
         <button
-          onClick={() => setCurrentQuestion(prev => Math.max(0, prev - 1))}
+          onClick={() => setCurrentQuestion((p) => Math.max(0, p - 1))}
           disabled={currentQuestion === 0}
           className={`
-            px-3 py-1.5 md:px-4 md:py-2 rounded-lg flex items-center transition-colors text-sm md:text-base
-            ${currentQuestion === 0
-              ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-              : 'bg-slate-800 text-white hover:bg-slate-700'
+            px-4 py-2 rounded-lg flex items-center
+            ${
+              currentQuestion === 0
+                ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                : "bg-slate-800 hover:bg-slate-700 text-white"
             }
           `}
         >
-          <ArrowLeft className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" /> Previous
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Previous
         </button>
 
-        <div className="flex space-x-2 md:space-x-3">
-          {isLastQuestion && (
-            <button
-              onClick={() => {
-                if (areAllQuestionsAnswered()) {
-                  setShowConfirmSubmit(true);
-                } else {
-                  // Get unanswered question indices
-                  const unanswered = getUnansweredQuestions();
-                  alert(`Please answer all questions before submitting. Questions ${unanswered.join(', ')} are unanswered.`);
-                }
-              }}
-              className={`
-                px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-colors flex items-center text-sm md:text-base
-                ${areAllQuestionsAnswered()
-                  ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
-                  : 'bg-slate-700 text-slate-300'
-                }
-              `}
-            >
-              <Send className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" /> Submit
-            </button>
-          )}
-          
-          {currentQuestion < quiz.totalQuestions - 1 && (
-            <button
-              onClick={() => setCurrentQuestion(prev => Math.min(quiz.totalQuestions - 1, prev + 1))}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-colors flex items-center text-sm md:text-base"
-            >
-              Next <ArrowLeft className="ml-1 md:ml-2 h-3 w-3 md:h-4 md:w-4 rotate-180" />
-            </button>
-          )}
-        </div>
+        {currentQuestion === totalQuestions - 1 ? (
+          <button
+            onClick={() =>
+              allAnswered()
+                ? setShowConfirmSubmit(true)
+                : alert("Please answer all questions.")
+            }
+            className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg text-white"
+          >
+            <Send className="mr-2 h-4 w-4 inline" /> Submit
+          </button>
+        ) : (
+          <button
+            onClick={() => setCurrentQuestion((p) => p + 1)}
+            className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg"
+          >
+            Next
+          </button>
+        )}
       </div>
 
-      {/* Help Text */}
-      <div className="mt-4 md:mt-6 bg-slate-800/50 rounded-lg p-3 md:p-4 flex items-start">
-        <HelpCircle className="text-cyan-400 mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5 mt-0.5 flex-shrink-0" />
-        <div>
-          <h3 className="text-xs md:text-sm font-semibold text-cyan-400">Need Help?</h3>
-          <p className="text-xs md:text-sm text-slate-400">
-            You can navigate between questions using the number buttons above or the previous/next buttons.
-            Your answers are automatically saved. You must answer all questions before submitting the quiz.
-          </p>
-        </div>
+      <div className="mt-6 bg-slate-800/50 p-4 rounded-lg flex">
+        <HelpCircle className="text-cyan-400 mr-3 h-5 w-5" />
+        <p className="text-slate-400 text-sm">
+          Navigate using the numbers above.  
+          All answers auto-save. You must answer every question before submitting.
+        </p>
       </div>
     </div>
   );
