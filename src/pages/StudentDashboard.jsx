@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { assignmentService } from '../services/assignmentService';
+import { classroomService } from '../services/classroomService';
 
 import {
   Trophy,
@@ -75,34 +77,48 @@ const StudentDashboard = () => {
           return;
         }
         
-        const response = await axios.get(
-          `http://localhost:2452/api/classrooms/student/${user.id}`,
-          {
-            withCredentials: true,
-            headers: {
-              Authorization: `Bearer ${token}` 
-            }
-          }
-        );
-        console.log(response.data);
-        if (response.data) {
+        const response = await classroomService.getStudentClassrooms(user.id);
+        console.log(response);
+        if (response) {
           // Map the backend data structure to our component's format
-          const mappedClassrooms = response.data.map((classroom, index) => ({
-            id: classroom.id || index,
-            name: classroom.className || classroom.name,
-            classcode: classroom.classCode || classroom.code,
-            subject: classroom.subject || 'General',
-            teacher: classroom.teacherName || classroom.teacher || 'Unknown',
-            color: getRandomClassColor(),
-            feedbackAvailable: false, // Placeholder, update with actual backend data if available
-            recentAssignments: classroom.assignments?.map((topic, topicIndex) => ({
-              id: topicIndex + 1,
-              name: topic.title,
-              description: topic.description,
-              status: getTopicStatus(topic),
-              createdAt: new Date(topic.createdAt).toLocaleDateString()
-            }))
-          }));
+          const mappedClassrooms = await Promise.all(
+            response.map(async (classroom, index) => {
+              // Use assignments data from classroom response instead of separate API call
+              const attemptedAssignments = classroom.assignments || [];
+
+              const assignedId = classroom.id || index;
+              console.log(`Mapping classroom:`, {
+                original: classroom,
+                assignedId: assignedId,
+                index: index
+              });
+
+              return {
+                id: classroom.cid || assignedId,
+                name: classroom.className || classroom.subject || 'Unknown Class',
+                classcode: classroom.classroomCode || classroom.code || 'N/A',
+                subject: classroom.subject || 'General',
+                teacher: classroom.teacherName || classroom.teacher || 'Unknown',
+                color: getRandomClassColor(),
+                feedbackAvailable: attemptedAssignments.some(a => a.feedbackAvailable) || false,
+                learningAssessmentCompleted: attemptedAssignments.some(a => a.assessmentCompleted) || false,
+                recentAssignments: attemptedAssignments.slice(0, 3).map((assignment, assignmentIndex) => ({
+                  id: assignment.asgnId || assignment.id || assignmentIndex + 1,
+                  name: assignment.title,
+                  description: assignment.description,
+                  status: getAssignmentStatus(assignment),
+                  dueDate: assignment.dueDate || 'No due date',
+                  type: assignment.type || 'assignment'
+                })) || classroom.assignments?.map((topic, topicIndex) => ({
+                  id: topicIndex + 1,
+                  name: topic.title,
+                  description: topic.description,
+                  status: getTopicStatus(topic),
+                  createdAt: new Date(topic.createdAt).toLocaleDateString()
+                })) || []
+              };
+            })
+          );
           console.log(mappedClassrooms)
           setClassrooms(mappedClassrooms);
         }
@@ -116,6 +132,15 @@ const StudentDashboard = () => {
 
     fetchClassrooms();
   }, []);
+
+  // Helper function to determine assignment status
+  const getAssignmentStatus = (assignment) => {
+    if (assignment.completed) return 'Completed';
+    if (assignment.submitted) return 'Submitted';
+    if (assignment.inProgress) return 'In Progress';
+    if (assignment.overdue) return 'Overdue';
+    return 'Not Started';
+  };
 
   // Helper function to determine topic status
   const getTopicStatus = (topic) => {
@@ -158,64 +183,71 @@ const StudentDashboard = () => {
         return;
       }
       
-      const response = await axios.post(
-        `http://localhost:2452/api/classrooms/join`, 
-        { 
-          studentId: user.id,
-          classroomCode: trimmedCode 
-        }, 
-        { 
-          withCredentials: true,
-          headers: {
-            Authorization: `Bearer ${token}` 
-          }
-        }
-      );
+      const response = await classroomService.joinClassroom(trimmedCode);
 
-      console.log("✅ Server Response:", response.data);
-      alert(response.data.message || "Successfully joined classroom!"); 
+      console.log("✅ Server Response:", response);
+      alert(response.message || "Successfully joined classroom!"); 
       
       // Refresh classrooms list
-      const fetchClassrooms = async () => {
+      const refreshClassrooms = async () => {
         try {
+          setLoading(true);
           const token = localStorage.getItem("token");
           const user = JSON.parse(localStorage.getItem("user") || "{}");
           
-          const response = await axios.get(
-            `http://localhost:2452/api/classrooms/student/${user.id}`,
-            {
-              withCredentials: true,
-              headers: {
-                Authorization: `Bearer ${token}` 
-              }
-            }
-          );
-          
-          if (response.data) {
-            const mappedClassrooms = response.data.map((classroom, index) => ({
-              id: classroom.id || index,
-              name: classroom.className || classroom.name,
-              classcode: classroom.classCode || classroom.code,
-              subject: classroom.subject || 'General',
-              teacher: classroom.teacherName || classroom.teacher || 'Unknown',
-              color: getRandomClassColor(),
-              feedbackAvailable: false,
-              recentAssignments: classroom.assignments?.map((topic, topicIndex) => ({
-                id: topicIndex + 1,
-                name: topic.title,
-                description: topic.description,
-                status: getTopicStatus(topic),
-                createdAt: new Date(topic.createdAt).toLocaleDateString()
-              }))
-            }));
+          const response = await classroomService.getStudentClassrooms(user.id);
+          console.log(response);
+          if (response) {
+            // Map the backend data structure to our component's format
+            const mappedClassrooms = await Promise.all(
+              response.map(async (classroom, index) => {
+                // Use assignments data from classroom response instead of separate API call
+                const attemptedAssignments = classroom.assignments || [];
+
+                const assignedId = classroom.id || index;
+                console.log(`Mapping classroom (second location):`, {
+                  original: classroom,
+                  assignedId: assignedId,
+                  index: index
+                });
+
+                return {
+                  id: classroom.cid || assignedId,
+                  name: classroom.className || classroom.subject || 'Unknown Class',
+                  classcode: classroom.classroomCode || classroom.code || 'N/A',
+                  subject: classroom.subject || 'General',
+                  teacher: classroom.teacherName || classroom.teacher || 'Unknown',
+                  color: getRandomClassColor(),
+                  feedbackAvailable: attemptedAssignments.some(a => a.feedbackAvailable) || false,
+                  learningAssessmentCompleted: attemptedAssignments.some(a => a.assessmentCompleted) || false,
+                  recentAssignments: attemptedAssignments.slice(0, 3).map((assignment, assignmentIndex) => ({
+                    id: assignment.asgnId || assignment.id || assignmentIndex + 1,
+                    name: assignment.title,
+                    description: assignment.description,
+                    status: getAssignmentStatus(assignment),
+                    dueDate: assignment.dueDate || 'No due date',
+                    type: assignment.type || 'assignment'
+                  })) || classroom.assignments?.map((topic, topicIndex) => ({
+                    id: topicIndex + 1,
+                    name: topic.title,
+                    description: topic.description,
+                    status: getTopicStatus(topic),
+                    createdAt: new Date(topic.createdAt).toLocaleDateString()
+                  })) || []
+                };
+              })
+            );
+            console.log(mappedClassrooms);
             setClassrooms(mappedClassrooms);
           }
+          setLoading(false);
         } catch (err) {
           console.error("Error refreshing classrooms:", err);
+          setLoading(false);
         }
       };
       
-      await fetchClassrooms();
+      await refreshClassrooms();
       
       setIsDialogOpen(false);
       setClassroomCode('');
@@ -308,7 +340,10 @@ const StudentDashboard = () => {
                 <div
                   key={classroom.id}
                   className="bg-slate-800 rounded-lg p-3 sm:p-4 hover:bg-slate-700 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/classroom/${classroom.classcode}`)}
+                  onClick={() => {
+                    console.log('Navigating to classroom with ID:', classroom.id, 'Classroom data:', classroom);
+                    navigate(`/classroom/${classroom.id}`);
+                  }}
                 >
                   <div className="flex justify-between items-center mb-2 sm:mb-3">
                     <h3 className="text-lg sm:text-xl font-semibold text-cyan-300 truncate">{classroom.name}</h3>

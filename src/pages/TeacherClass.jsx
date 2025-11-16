@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from "axios";
+import AssignmentManager from '../components/AssignmentManager';
+import { classroomService } from '../services/classroomService';
+import { assignmentService } from '../services/assignmentService';
 import {
   Users,
   BookOpen,
@@ -26,6 +29,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 const TeacherClass = () => {
   const { classcode } = useParams();
   const [classroom, setClassroom] = useState(null);
+  const [assignmentsList, setAssignmentsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -34,6 +38,9 @@ const TeacherClass = () => {
   const [newAssignment, setNewAssignment] = useState({
     title: '',
     description: '',
+    difficulty: 'medium',
+    numMcqs: 5,
+    numWriting: 2,
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -44,18 +51,14 @@ const TeacherClass = () => {
     const fetchClassroomData = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
-        const response = await axios.get(
-          `http://localhost:2452/api/classrooms/${classcode}`,
-          {
-            withCredentials: true,
-            headers: {
-              Authorization: `Bearer ${token}` 
-            }
-          },
-        );
-        console.log(response);
-        setClassroom(response.data);
+        const [classroomResponse, assignmentsResponse] = await Promise.all([
+          classroomService.getClassroomByCode(classcode),
+          assignmentService.getAllAssignmentsByClassroom(classcode).catch(() => [])
+        ]);
+        console.log('Classroom:', classroomResponse);
+        console.log('Assignments:', assignmentsResponse);
+        setClassroom(classroomResponse);
+        setAssignmentsList(assignmentsResponse);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching classroom data:", err);
@@ -72,17 +75,12 @@ const TeacherClass = () => {
   // Refresh data after adding a new assignment/topic
   const refreshClassroomData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        `http://localhost:2452/api/classrooms/${classcode}`,
-        {
-          withCredentials: true,
-          headers: {
-            Authorization: `Bearer ${token}` 
-          }
-        },
-      );
-      setClassroom(response.data);
+      const [classroomResponse, assignmentsResponse] = await Promise.all([
+        classroomService.getClassroomByCode(classcode),
+        assignmentService.getAllAssignmentsByClassroom(classcode).catch(() => [])
+      ]);
+      setClassroom(classroomResponse);
+      setAssignmentsList(assignmentsResponse);
     } catch (err) {
       console.error("Error refreshing classroom data:", err);
     }
@@ -109,9 +107,6 @@ const TeacherClass = () => {
     lastWeek: 89,
     thisWeek: 95,
   };
-
-  // Dummy data for assignments tab
-  const assignmentsData = classroom?.assignments || [];
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -174,31 +169,26 @@ const TeacherClass = () => {
     setSubmitSuccess(false);
     
     try {
-      // Make API call to add a new topic
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/assignment/${classcode}/quiz`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: newAssignment.title,
-          description: newAssignment.description,
-        }),
-        withCredentials: 'true',
+      // Use the updated assignment service
+      const quizJson = await assignmentService.createAssignment({
+        title: newAssignment.title,
+        description: newAssignment.description,
+        classroomCode: classroom.classCode || classroom.classroomCode,
+        difficulty: newAssignment.difficulty,
+        numMcqs: newAssignment.numMcqs,
+        numWriting: newAssignment.numWriting,
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to add assignment');
-      }
+      console.log('Assignment created successfully:', quizJson);
       
-      const data = await response.json();
-      console.log('Assignment added successfully:', data);
-      
-      // Reset form and close dialog
-      setNewAssignment({ title: '', description: '' });
+      // Reset form to initial values
+      setNewAssignment({ 
+        title: '', 
+        description: '', 
+        difficulty: 'medium',
+        numMcqs: 5,
+        numWriting: 2,
+      });
       setSubmitSuccess(true);
       
       // Refresh classroom data to show the new assignment
@@ -210,7 +200,7 @@ const TeacherClass = () => {
         setSubmitSuccess(false);
       }, 1500);
     } catch (err) {
-      console.error('Error adding assignment:', err);
+      console.error('Error creating assignment:', err);
       setSubmitError(err.message);
     } finally {
       setSubmitting(false);
@@ -376,7 +366,7 @@ const TeacherClass = () => {
                   <BookOpen className="text-green-400" size={18} />
                   <span className="text-xs text-slate-400">Assignments</span>
                 </div>
-                <p className="text-xl md:text-2xl font-bold">{assignments.length}</p>
+                <p className="text-xl md:text-2xl font-bold">{assignmentsList.length}</p>
               </div>
               <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
@@ -455,10 +445,10 @@ const TeacherClass = () => {
                 </button>
               </div>
               <div className="space-y-2 md:space-y-3">
-                {assignments.length > 0 ? (
-                  assignments.slice(0, 3).map((assignment, index) => (
+                {assignmentsList.length > 0 ? (
+                  assignmentsList.slice(0, 3).map((assignment, index) => (
                     <div
-                      key={index}
+                      key={assignment.id || index}
                       className="bg-slate-800 p-3 md:p-4 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between hover:bg-slate-700 transition-colors gap-2"
                     >
                       <div className="flex items-center space-x-3">
@@ -550,36 +540,15 @@ const TeacherClass = () => {
       )}
 
       {activeTab === 'assignments' && (
-        <div className="space-y-4 md:space-y-6">
-          <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3 md:mb-4">Assignments</h2>
-          <div className="bg-slate-900 p-4 md:p-6 rounded-xl border border-slate-800">
-            <div className="space-y-3 md:space-y-4">
-              {assignments.length > 0 ? (
-                assignments.map((assignment, index) => (
-                  <div key={index} className="bg-slate-800 p-3 md:p-4 rounded-lg hover:bg-slate-700 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div>
-                      <h3 className="font-medium text-base md:text-lg text-cyan-300">{assignment.title || 'Untitled Assignment'}</h3>
-                      <p className="text-slate-400 text-xs md:text-sm mt-1">{assignment.description || 'No description'}</p>
-                    </div>
-                    <div className="text-left sm:text-right">
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(assignment.status || 'active')}`}>
-                        {(assignment.status || 'active').charAt(0).toUpperCase() + 
-                         (assignment.status || 'active').slice(1)}
-                      </span>
-                      <p className="text-slate-400 text-xs md:text-sm mt-1">
-                        {assignment.submissions ? `Submissions: ${assignment.submissions}/${studentsCount}` : 'No submissions yet'}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center p-4 text-slate-400 text-sm md:text-base">
-                  No assignments yet. Create your first assignment!
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <AssignmentManager 
+          classroomCode={classcode}
+          classroomId={classroom?.id}
+          isTeacher={true}
+          onAssignmentChange={() => {
+            // Refresh classroom data when assignments change
+            refreshClassroomData();
+          }}
+        />
       )}
 
       {activeTab === 'students' && (
@@ -737,6 +706,52 @@ const TeacherClass = () => {
                   placeholder="Enter assignment description"
                   required
                 />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Difficulty Level
+                </label>
+                <select
+                  value={newAssignment.difficulty}
+                  onChange={(e) => setNewAssignment({ ...newAssignment, difficulty: e.target.value })}
+                  className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                >
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    Number of MCQs
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={newAssignment.numMcqs}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, numMcqs: parseInt(e.target.value) || 5 })}
+                    className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    placeholder="5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    Number of Writing Questions
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={newAssignment.numWriting}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, numWriting: parseInt(e.target.value) || 2 })}
+                    className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    placeholder="2"
+                  />
+                </div>
               </div>
               <div className="flex space-x-3 mt-6">
                 <button

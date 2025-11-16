@@ -22,9 +22,11 @@ import {
   Lightbulb,
   BookMarked,
   Menu,
-  X
+  X,
+  Play
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import classroomService from '../services/classroomService';
 
 const ClassDetails = () => {
   const [classroom, setClassroom] = useState({
@@ -58,58 +60,33 @@ const ClassDetails = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('assignments');
-  const { classId } = useParams();
-  const { classcode } = useParams();
+  const { classroomId } = useParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   useEffect(() => {
     const fetchClassroomData = async () => {
       try {
-        setLoading(true);
-        const token = localStorage.getItem('token'); // Assuming you store the token in localStorage
-        const response = await fetch(`/api/classroom/${classcode}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        // Add debugging and validation
+        console.log('ClassDetails: classroomId from params:', classroomId);
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch classroom data');
+        if (!classroomId || classroomId === '0' || classroomId === 'undefined') {
+          throw new Error('Invalid classroom ID provided');
         }
-        const data = await response.json();
         
-        // Transform the data to match our component's expected structure
+        setLoading(true);
+        const response = await classroomService.getClassroomById(classroomId);
+        
+        console.log('API Response:', response);
+        console.log('Assignments from API:', response.assignments);
+        
+        // Transform data to match expected format
         const transformedData = {
-          className: data.className,
-          classJoinedDate: new Date(data.classJoinedDate).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          }),
-          teacherName: data.teacherName,
-          subject: data.subject,
-          classDescription: data.classDescription,
-          assignments: data.assignments.map(assignment => ({
-            id: assignment.id,
-            name: assignment.title,
-            description: assignment.description,
-            status: assignment.attemptedDate ? 'Completed' : 'Not Started',
-            releaseDate: new Date(assignment.creationDate).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            }),
-            submittedOn: assignment.attemptedDate ? new Date(assignment.attemptedDate).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            }) : null,
-            score: assignment.score,
-            feedback: null // Assuming feedback is not provided in the API response
-          })),
-          // Keep the default values for learningAssessment and overallFeedback
+          className: response.className || response.subject || 'Unknown Class',
+          classJoinedDate: response.createdAt || new Date().toISOString(),
+          teacherName: response.teacherName || 'Unknown Teacher',
+          subject: response.subject || 'General',
+          classDescription: response.description || 'No description available',
+          assignments: response.assignments || [],
           // until we have API endpoints for these
           learningAssessment: {
             completed: false,
@@ -176,14 +153,23 @@ Overall, your trajectory in this course is positive, with your dedication to lea
         console.log(response.data);
         setClassroom(transformedData);
       } catch (err) {
-        setError(err.message);
         console.error('Error fetching classroom data:', err);
+        
+        // If it's an invalid ID error, navigate back to dashboard
+        if (err.message === 'Invalid classroom ID provided') {
+          setError('Invalid classroom ID. Redirecting to dashboard...');
+          setTimeout(() => {
+            navigate('/student-dashboard');
+          }, 2000);
+        } else {
+          setError(err.message || 'Failed to load classroom details');
+        }
       } finally {
         setLoading(false);
       }
     };
     fetchClassroomData();
-  }, [classId]);
+  }, [classroomId]);
   
   const takeAssignment = (assignmentId) => { 
     navigate(`/quizform/${assignmentId}`); 
@@ -202,7 +188,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
   };
 
   const handleAssessmentAttempt = () => {
-    navigate(`/classroom/${classcode}/assessment/0101`);
+    navigate(`/classroom/${classroomId}/assessment/0101`);
   };
 
   const toggleMobileMenu = () => {
@@ -369,101 +355,24 @@ Overall, your trajectory in this course is positive, with your dedication to lea
       <div className="bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 border border-slate-800">
         {activeTab === 'assignments' && (
           <div>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-              <h2 className="text-lg sm:text-xl font-bold text-cyan-400 mb-3 sm:mb-0">Assignments</h2>
-              
-              <div className="flex flex-wrap gap-2">
-                <span className="flex items-center text-xs bg-slate-800 px-2 sm:px-3 py-1 rounded-full">
-                  <CheckCircle className="h-3 w-3 text-green-500 mr-1" /> {classroom.assignments.filter(a => a.status === 'Completed').length} Completed
-                </span>
-                <span className="flex items-center text-xs bg-slate-800 px-2 sm:px-3 py-1 rounded-full">
-                  <Clock className="h-3 w-3 text-yellow-500 mr-1" /> {classroom.assignments.filter(a => a.status === 'In Progress' || a.status === 'Pending Review').length} Pending
-                </span>
-                <span className="flex items-center text-xs bg-slate-800 px-2 sm:px-3 py-1 rounded-full">
-                  <AlertCircle className="h-3 w-3 text-red-500 mr-1" /> {classroom.assignments.filter(a => a.status === 'Not Started').length} Not Started
-                </span>
-              </div>
-            </div>
+            <h2 className="text-lg sm:text-xl font-bold text-cyan-400 mb-6">Assignments</h2>
             
-            {classroom.assignments.length > 0 ? (
+            {classroom.assignments && classroom.assignments.length > 0 ? (
               <div className="space-y-4">
                 {classroom.assignments.map((assignment) => (
-                  <div key={assignment.id} className="bg-slate-800 rounded-lg p-3 sm:p-4 hover:bg-slate-700 transition-colors">
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2">
-                      <div className="mb-2 sm:mb-0">
-                        <h3 className="text-base sm:text-lg font-semibold text-cyan-300">{assignment.name}</h3>
-                        <p className="text-xs sm:text-sm text-slate-400">{assignment.description}</p>
+                  <div key={assignment.asgnId || assignment.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-cyan-300 mb-1">{assignment.title}</h3>
+                        <p className="text-sm text-slate-400">{assignment.description || 'No description available'}</p>
                       </div>
-                      <span className={`
-                        ${assignment.status === 'Completed' ? 'bg-green-500' : 
-                          'bg-red-500'} 
-                        text-white px-2 py-1 rounded-full text-xs self-start sm:self-auto`}
+                      <button
+                        onClick={() => takeAssignment(assignment.asgnId || assignment.id)}
+                        className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center"
                       >
-                        {assignment.status}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4 text-xs sm:text-sm">
-                      <div className="bg-slate-700 p-2 rounded flex items-center">
-                        <Calendar className="h-4 w-4 mr-2 text-cyan-400" />
-                        <div>
-                          <span className="text-xs text-slate-400">Released</span>
-                          <p>{assignment.releaseDate}</p>
-                        </div>
-                      </div>
-                      
-                      {assignment.submittedOn && (
-                        <div className="bg-slate-700 p-2 rounded flex items-center">
-                          <Upload className="h-4 w-4 mr-2 text-green-400" />
-                          <div>
-                            <span className="text-xs text-slate-400">Attempted</span>
-                            <p>{assignment.submittedOn}</p>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {assignment.score !== null && (
-                        <div className="bg-slate-700 p-2 rounded flex items-center">
-                          <Award className="h-4 w-4 mr-2 text-yellow-400" />
-                          <div>
-                            <span className="text-xs text-slate-400">Score</span>
-                            <p>{assignment.score}%</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {assignment.feedback && (
-                      <div className="mt-4 bg-slate-700 p-3 rounded-lg border-l-4 border-cyan-500">
-                        <h4 className="text-xs sm:text-sm font-semibold text-cyan-300 mb-1">Feedback</h4>
-                        <p className="text-xs sm:text-sm">{assignment.feedback}</p>
-                      </div>
-                    )}
-                    
-                    <div className="mt-4 flex flex-wrap justify-end gap-2">
-                      {assignment.status === 'Not Started' || assignment.status === 'In Progress' ? (
-                        <button 
-                          onClick={() => takeAssignment(assignment.id)} 
-                          className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center transition-colors"
-                        >
-                          <Upload className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> Start Assignment
-                        </button>
-                      ) : (
-                        <>
-                          <button 
-                            onClick={() => viewSolution(assignment.id)} 
-                            className="bg-slate-700 hover:bg-slate-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center transition-colors"
-                          >
-                            <Eye className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> View Solution
-                          </button>
-                          <button 
-                            onClick={() => viewFeedback(assignment.id)}
-                            className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center transition-colors"
-                          >
-                            <MessageSquare className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> View Feedback
-                          </button>
-                        </>
-                      )}
+                        <Play className="h-4 w-4 mr-2" />
+                        Attempt Assignment
+                      </button>
                     </div>
                   </div>
                 ))}

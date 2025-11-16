@@ -35,7 +35,7 @@ const router = createBrowserRouter([
             element:<AuthForm/>
          },
          {
-            path:"/classroom/:classcode",
+            path:"/classroom/:classroomId",
             element:<ClassDetails/>
          },
          {
@@ -62,7 +62,7 @@ const router = createBrowserRouter([
             path:"/about",
             element:<About/>
          },{
-            path:"/classroom/:classcode/assessment/:assessmentId",
+            path:"/classroom/:classroomId/assessment/:assessmentId",
             element:<AssessmentAttempt/>
          }
         ]

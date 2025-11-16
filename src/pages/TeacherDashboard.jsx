@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { assignmentService } from "../services/assignmentService";
+import { classroomService } from "../services/classroomService";
 
 import {
   Users,
@@ -66,40 +68,56 @@ const TeacherDashboard = () => {
       try {
         setLoading(true);
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          "http://localhost:2452/api/teacher-dashboard",
-          {
-            withCredentials: true,
-            headers: {
-              Authorization: `Bearer ${token}` 
-            }
-          },
-        );
-        if (response.data) {
-          // Map the backend data structure to match our component's expected format
-          const mappedClassrooms = response.data.map(
-            (classroom, index) => ({
-              id: index + 1,
-              name: classroom.className,
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        if (!user.id) {
+          throw new Error("Teacher ID not found. Please login again.");
+        }
+        
+        const response = await classroomService.getTeacherClassrooms(user.id);
+        console.log("Fetched classrooms:", response);
+        
+        if (response) {
+          // Check if no classrooms found
+          if (response.length === 0) {
+            setClassrooms([]);
+            setLoading(false);
+            return;
+          }
+          
+          // Simple mapping without assignment fetching to isolate the issue
+          const mappedClassrooms = response.map((classroom, index) => {
+            console.log("Mapping classroom:", classroom);
+            
+            const mappedClassroom = {
+              id: classroom.classroomId || classroom.id || index + 1,
+              name: classroom.className || classroom.name || "Untitled Classroom",
               subject: classroom.subject,
-              classCode: classroom.classCode,
-              students: classroom.studentCount,
-              assignmentsCount: classroom.topicCount,
-              learningAssessment: true,
-              recentAssignments:
-                classroom.assignments.map((topic, topicIndex) => ({
-                  id: topicIndex + 1,
-                  title: topic.title || topic.name || "Untitled Topic",
-                  status: topic.status || "pending",
-                })) || [],
-            }),
-          );
+              classCode: classroom.classroomCode || classroom.classCode,
+              students: classroom.studentCount || classroom.students?.length || 0,
+              assignmentsCount: 0, // Temporarily set to 0
+              learningAssessment: classroom.learningAssessmentEnabled || true,
+              recentAssignments: [], // Temporarily empty
+            };
+            
+            console.log("Mapped classroom:", mappedClassroom);
+            return mappedClassroom;
+          });
+          
+          console.log("Setting classrooms:", mappedClassrooms);
           setClassrooms(mappedClassrooms);
         }
         setLoading(false);
       } catch (err) {
         console.error("Error fetching classrooms:", err);
-        setError("Failed to load classrooms. Please try again later.");
+        if (err.response?.status === 404) {
+          setError("Teacher not found. Please check your credentials and try again.");
+        } else if (err.response?.status === 401) {
+          setError("Unauthorized. Please login again.");
+        } else if (err.message?.includes("Teacher ID not found")) {
+          setError(err.message);
+        } else {
+          setError("Failed to load classrooms. Please try again later.");
+        }
         setLoading(false);
       }
     };
@@ -112,28 +130,17 @@ const TeacherDashboard = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.post(
-        `http://localhost:2452/api/classrooms/create`,
-        {
-          name: newClassroom.name,
+      const response = await classroomService.createClassroom({
+          className: newClassroom.name,
           subject: newClassroom.subject,
           classroomCode: newClassroom.classroomCode,
-          description: newClassroom.description,
-        },
-        {
-          withCredentials: true,
-          headers: {
-            Authorization: `Bearer ${token}` 
-          }
-        },
-      );
-
-      if (response.data.classCode) {
+        });
+      if (response.classroomCode || response.classCode) {
         setIsDialogOpen(false);
         // Refresh classroom list or navigate
-        navigate(`/teacher-class/${response.data.classCode}`);
+        navigate(`/teacher-class/${response.classroomCode || response.classCode}`);
       } else {
-        alert("Error: " + response.data.message);
+        alert("Error: " + (response.message || "Unknown error occurred"));
       }
     } catch (error) {
       alert(error.response?.data?.message || "Error creating classroom!");
@@ -395,9 +402,8 @@ const TeacherDashboard = () => {
               </div>
             ) : classrooms.length === 0 ? (
               <div className="bg-slate-800 rounded-lg p-6 sm:p-8 text-center">
-                <p className="text-slate-400">
-                  No classrooms found. Create your first classroom to get
-                  started.
+                <p className="text-slate-400 text-lg">
+                  No Classroom Found
                 </p>
               </div>
             ) : (
