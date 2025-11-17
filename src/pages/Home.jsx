@@ -41,7 +41,27 @@ function Home() {
   }, []);
 
   const handleLoginSignup = async () => {
-    navigate("/authform");
+    // Check if user is already logged in
+    const token = localStorage.getItem("token");
+    const userStr = localStorage.getItem("user");
+    
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        // Redirect to appropriate dashboard based on user role
+        if (user.roles && user.roles.includes('ROLE_TEACHER')) {
+          navigate("/teacher-dashboard");
+        } else {
+          navigate("/student-dashboard");
+        }
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        navigate("/authform");
+      }
+    } else {
+      // User is not logged in, redirect to auth form
+      navigate("/authform");
+    }
   };
   const handleTeacherDashboard= async () =>{
     const teacherCode = prompt("Enter Teacher Code: #Education");

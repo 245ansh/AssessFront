@@ -124,6 +124,23 @@ export const assignmentService = {
       throw error;
     }
   },
+
+  // Delete assignment by ID
+  deleteAssignment: async (assignmentId) => {
+    try {
+      const response = await axios.delete(
+        `${API_BASE_URL}/${assignmentId}`,
+        {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      throw error;
+    }
+  },
 };
 
 export default assignmentService;

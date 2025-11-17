@@ -47,7 +47,7 @@ const ResultPage = () => {
       {/* HEADER */}
       <div className="flex items-center mb-6">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate("/student-dashboard")}
           className="bg-slate-800 p-2 rounded-full mr-4 hover:bg-slate-700"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -98,7 +98,7 @@ const ResultPage = () => {
           </p>
 
           <p>
-            Correct Answers:{" "}
+            Correct MCQs:{" "}
             <span className="text-green-400 font-bold">{correctAnswers}</span>
           </p>
 
@@ -109,7 +109,7 @@ const ResultPage = () => {
         </div>
 
         {/* AI FEEDBACK BUTTON */}
-        <button
+        {/* <button
           onClick={handleAI_Feedback}
           disabled={loadingFeedback}
           className={`mt-6 flex items-center gap-2 px-6 py-3 text-white rounded-lg transition text-lg 
@@ -125,7 +125,7 @@ const ResultPage = () => {
             <Sparkles className="h-5 w-5" />
           )}
           AI Feedback
-        </button>
+        </button> */}
       </div>
 
       {/* QUESTION RESULTS */}
@@ -141,11 +141,12 @@ const ResultPage = () => {
                 Question {index + 1}
               </h3>
 
-              {q.correct ? (
+              {q.type !== "Paragraph" && (
+                q.correct ? (
                 <CheckCircle className="text-green-500 h-6 w-6" />
               ) : (
                 <XCircle className="text-red-500 h-6 w-6" />
-              )}
+              ))}
             </div>
 
             {/* Question */}

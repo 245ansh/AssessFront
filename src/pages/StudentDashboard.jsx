@@ -351,7 +351,6 @@ const StudentDashboard = () => {
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-400 mb-2 sm:mb-3">Subject: {classroom.subject}</p>
-                  <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4">Teacher: {classroom.teacher}</p>
 
                   <div className="mb-3 sm:mb-4">
                     <h4 className="text-xs sm:text-sm text-slate-300 mb-1.5 sm:mb-2 flex items-center">
@@ -379,85 +378,10 @@ const StudentDashboard = () => {
                       ))}
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-2 sm:mt-3">
-                    <div className={`flex items-center justify-center p-1.5 sm:p-2 rounded-lg ${classroom.feedbackAvailable ? 'bg-green-900 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                      <MessageSquare className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="text-xs">Feedback</span>
-                    </div>
-                    <div className={`flex items-center justify-center p-1.5 sm:p-2 rounded-lg ${classroom.learningAssessmentCompleted ? 'bg-purple-900 text-purple-400' : 'bg-slate-700 text-slate-400'}`}>
-                      <Brain className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="text-xs">Assessment</span>
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
-        
-        {/* Learning Goals and Achievements in stacked layout on mobile, side by side on desktop */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 border border-slate-800 transform transition-all hover:scale-[1.01] sm:hover:scale-[1.02]">
-            <h2 className="text-xl sm:text-2xl font-bold text-cyan-400 flex items-center mb-4 sm:mb-6">
-              <Trophy className="mr-2 sm:mr-3 h-5 w-5 sm:h-6 sm:w-6 text-cyan-500" /> Achievements
-            </h2>
-
-            <div className="space-y-3 sm:space-y-4">
-              {studentProfile.achievements.map((achievement) => (
-                <div
-                  key={achievement.id}
-                  className="bg-slate-800 rounded-lg p-3 sm:p-4 flex items-center justify-between hover:bg-slate-700 transition-colors"
-                >
-                  <div className="flex items-center">
-                    {React.cloneElement(achievement.icon, { className: achievement.icon.props.className + ' h-4 w-4 sm:h-5 sm:w-5' })}
-                    <div className="ml-3 sm:ml-4">
-                      <h3 className="text-base sm:text-lg font-semibold text-cyan-300">{achievement.name}</h3>
-                      <span className="text-xs sm:text-sm text-slate-400">Level: {achievement.level}</span>
-                    </div>
-                  </div>
-                  <Award className="text-yellow-500 h-4 w-4 sm:h-5 sm:w-5" />
-                </div>
-              ))}
-            </div>
-
-            <button className="mt-4 sm:mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white py-2 sm:py-3 rounded-lg transition-colors text-sm sm:text-base">
-              View All Achievements
-            </button>
-          </div>
-
-          <div className="bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 border border-slate-800 transform transition-all hover:scale-[1.01] sm:hover:scale-[1.02]">
-            <h2 className="text-xl sm:text-2xl font-bold text-cyan-400 flex items-center mb-4 sm:mb-6">
-              <Target className="mr-2 sm:mr-3 h-5 w-5 sm:h-6 sm:w-6 text-cyan-500" /> Learning Goals
-            </h2>
-
-            <div className="space-y-3 sm:space-y-4">
-              {studentProfile.learningGoals.map((goal) => (
-                <div
-                  key={goal.id}
-                  className="bg-slate-800 rounded-lg p-3 sm:p-4 hover:bg-slate-700 transition-colors"
-                >
-                  <div className="flex justify-between items-center mb-1.5 sm:mb-2">
-                    <h3 className="text-base sm:text-lg font-semibold text-cyan-300 truncate mr-2">{goal.title}</h3>
-                    <span className="text-xs sm:text-sm text-slate-400 whitespace-nowrap">{goal.progress}%</span>
-                  </div>
-                  <div className="w-full bg-slate-700 rounded-full h-2 sm:h-2.5 mb-1.5 sm:mb-2">
-                    <div
-                      className="bg-cyan-500 h-2 sm:h-2.5 rounded-full"
-                      style={{ width: `${goal.progress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-300">{goal.description}</p>
-                  <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                    <span className="text-xs text-purple-400 truncate">Reward: {goal.reward}</span>
-                    <button className="text-xs bg-cyan-600 text-white px-3 py-1 rounded-full hover:bg-cyan-700 transition-colors w-full sm:w-auto text-center">
-                      Update Goal
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

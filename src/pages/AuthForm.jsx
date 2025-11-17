@@ -24,10 +24,7 @@ const AuthForm = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  const handleGoogleLogin = () => {
-    window.location.href = "/api/auth/google"; // Redirect to Google Auth
-  };
-
+  
   const handleSignUp = async (e) => {
     e.preventDefault();
 
@@ -35,6 +32,16 @@ const AuthForm = () => {
     const email = e.target.email.value;
     const password = e.target.password.value;
     const role = e.target.role?.value || 'ROLE_STUDENT';
+
+    // Validation
+    if (email.length < 6) {
+      alert("Email must be at least 6 characters long.");
+      return;
+    }
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters long.");
+      return;
+    }
 
     try {
       const response = await axios.post("http://localhost:2452/api/users/signup", {
@@ -68,6 +75,16 @@ const AuthForm = () => {
 
     const username = e.target.username.value;
     const password = e.target.password.value;
+
+    // Validation
+    if (username.length < 6) {
+      alert("Username must be at least 6 characters long.");
+      return;
+    }
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters long.");
+      return;
+    }
 
     try {
       const response = await axios.post("http://localhost:2452/api/users/signin", {
@@ -130,26 +147,6 @@ const AuthForm = () => {
           {isActive ? (
             <form onSubmit={handleSignUp} className="p-6">
               <h2 className="text-lg font-semibold mb-4 text-white text-center">Create Account</h2>
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                className="flex items-center justify-center gap-2 w-full bg-white text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-100 mb-4 shadow-md"
-              >
-                <div className="flex-shrink-0 w-5 h-5">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-full h-full">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                  </svg>
-                </div>
-                <span>Sign up with Google</span>
-              </button>
-              <div className="flex items-center gap-2 w-full my-4">
-                <div className="flex-1 h-px bg-gray-600"></div>
-                <span className="text-xs text-gray-400">or</span>
-                <div className="flex-1 h-px bg-gray-600"></div>
-              </div>
               <input
                 type="text"
                 placeholder="Username"
@@ -188,26 +185,6 @@ const AuthForm = () => {
           ) : (
             <form onSubmit={handleSignIn} className="p-6">
               <h2 className="text-lg font-semibold mb-4 text-white text-center">Sign In</h2>
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                className="flex items-center justify-center gap-2 w-full bg-white text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-100 mb-4 shadow-md"
-              >
-                <div className="flex-shrink-0 w-5 h-5">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-full h-full">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                  </svg>
-                </div>
-                <span>Sign in with Google</span>
-              </button>
-              <div className="flex items-center gap-2 w-full my-4">
-                <div className="flex-1 h-px bg-gray-600"></div>
-                <span className="text-xs text-gray-400">or</span>
-                <div className="flex-1 h-px bg-gray-600"></div>
-              </div>
               <input
                 type="text"
                 placeholder="Username"
@@ -246,30 +223,10 @@ const AuthForm = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#001a2c] to-slate-950 p-4">
       <div className={`bg-slate-800 rounded-[30px] shadow-lg relative overflow-hidden w-[768px] max-w-full min-h-[480px] ${isActive ? 'active' : ''}`}>
         {/* Sign Up Form */}
-        <div className={`absolute top-0 h-full transition-all duration-600 ease-in-out ${isActive ? 'translate-x-[100%] opacity-100 z-[5]' : 'left-0 w-1/2 opacity-0 z-[1]'
+        <div className={`ml-10 absolute top-0 h-full transition-all duration-600 ease-in-out ${isActive ? 'translate-x-[100%] opacity-100 z-[5]' : 'left-0 w-1/2 opacity-0 z-[1]'
           }`}>
           <form onSubmit={handleSignUp} className="bg-slate-800 h-full flex flex-col items-center justify-center px-8 lg:px-16">
             <h1 className="text-xl lg:text-2xl font-bold mb-4 text-white">Create Account</h1>
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="flex items-center justify-center gap-2 w-full max-w-xs bg-white text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-100 mb-4 shadow-md"
-            >
-              <div className="flex-shrink-0 w-5 h-5">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-full h-full">
-                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                </svg>
-              </div>
-              <span>Sign up with Google</span>
-            </button>
-            <div className="flex items-center gap-4 w-full max-w-xs my-4">
-              <div className="flex-1 h-px bg-gray-600"></div>
-              <span className="text-sm text-gray-400">or</span>
-              <div className="flex-1 h-px bg-gray-600"></div>
-            </div>
             <input
               type="text"
               placeholder="Username"
@@ -308,30 +265,10 @@ const AuthForm = () => {
         </div>
 
         {/* Sign In Form */}
-        <div className={`absolute top-0 h-full transition-all duration-600 ease-in-out ${isActive ? 'translate-x-[100%]' : 'left-0 w-1/2 z-[2]'
+        <div className={`absolute  top-0 h-full transition-all duration-600 ease-in-out ${isActive ? 'translate-x-[100%]' : 'left-0 w-1/2 z-[2]'
           }`}>
           <form onSubmit={handleSignIn} className="bg-slate-800 h-full flex flex-col items-center justify-center px-8 lg:px-16">
             <h1 className="text-xl lg:text-2xl font-bold mb-4 text-white">Sign In</h1>
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="flex items-center justify-center gap-2 w-full max-w-xs bg-white text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-100 mb-4 shadow-md"
-            >
-              <div className="flex-shrink-0 w-5 h-5">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-full h-full">
-                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                </svg>
-              </div>
-              <span>Sign in with Google</span>
-            </button>
-            <div className="flex items-center gap-4 w-full max-w-xs my-4">
-              <div className="flex-1 h-px bg-gray-600"></div>
-              <span className="text-sm text-gray-400">or</span>
-              <div className="flex-1 h-px bg-gray-600"></div>
-            </div>
             <input
               type="text"
               placeholder="Username"
@@ -353,11 +290,7 @@ const AuthForm = () => {
             >
               Sign In
             </button>
-            <div className="mt-4 text-center">
-              <p className="text-sm text-gray-400">Demo Login:</p>
-              <p className="text-sm text-gray-400">Student: Username - demo, Password - demo</p>
-              <p className="text-sm text-gray-400">Teacher: Username - teacher, Password - teacher</p>
-            </div>
+            
           </form>
         </div>
 

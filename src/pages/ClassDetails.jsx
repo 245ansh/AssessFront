@@ -22,7 +22,8 @@ import {
   Play
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import classroomService from '../services/classroomService';
+import { assignmentService } from '../services/assignmentService';
+import { classroomService } from '../services/classroomService';
 
 const ClassDetails = () => {
   const [classroom, setClassroom] = useState({
@@ -60,11 +61,22 @@ const ClassDetails = () => {
   const [feedbackError, setFeedbackError] = useState(null);
   const [feedbackData, setFeedbackData] = useState(null);
   const [feedbackFetchedOnce, setFeedbackFetchedOnce] = useState(false);
+  const [attemptedAssignments, setAttemptedAssignments] = useState([]);
 
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('assignments');
   const { classroomId } = useParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const fetchAttemptedAssignments = useCallback(async () => {
+    try {
+      const response = await assignmentService.getAttemptedAssignments(classroomId);
+      setAttemptedAssignments(response || []);
+    } catch (err) {
+      console.error('Error fetching attempted assignments:', err);
+      setAttemptedAssignments([]);
+    }
+  }, [classroomId]);
 
   useEffect(() => {
     const fetchClassroomData = async () => {
@@ -76,6 +88,8 @@ const ClassDetails = () => {
         }
 
         setLoading(true);
+        setError(null);
+        
         const response = await classroomService.getClassroomById(classroomId);
 
         console.log('API Response:', response);
@@ -129,6 +143,9 @@ const ClassDetails = () => {
         };
 
         setClassroom(transformedData);
+        
+        // Fetch attempted assignments after getting classroom data
+        await fetchAttemptedAssignments();
       } catch (err) {
         console.error('Error fetching classroom data:', err);
 
@@ -145,7 +162,7 @@ const ClassDetails = () => {
       }
     };
     fetchClassroomData();
-  }, [classroomId, navigate]);
+  }, [classroomId, navigate, fetchAttemptedAssignments]);
 
   // fetch feedback from backend
   const fetchFeedback = useCallback(async (opts = { force: false }) => {
@@ -190,6 +207,16 @@ const ClassDetails = () => {
   }, [activeTab, fetchFeedback]);
 
   const takeAssignment = (assignmentId) => {
+    // Check if assignment has already been attempted
+    const isAttempted = attemptedAssignments.some(assignment => 
+      assignment.id === assignmentId || assignment.asgnId === assignmentId
+    );
+    
+    if (isAttempted) {
+      alert('You have already attempted this assignment. You cannot attempt it again.');
+      return;
+    }
+    
     navigate(`/quizform/${assignmentId}`);
   };
 
@@ -256,15 +283,11 @@ const ClassDetails = () => {
           </div>
         </div>
         <div className="mt-2 sm:mt-0">
-          <button
-            className="px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition duration-150 ease-in-out"
-          >
-            Leave Class
-          </button>
+          
         </div>
       </div>
 
-      {/* Classroom Overview Card */}
+      {/* Classroom Overview Card
       <div className="bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 border border-slate-800 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
           <div className="bg-slate-800 p-3 sm:p-4 rounded-lg flex items-center">
@@ -293,7 +316,7 @@ const ClassDetails = () => {
         </div>
 
         <p className="text-slate-300 text-sm sm:text-base">{classroom.classDescription}</p>
-      </div>
+      </div> */}
 
       {/* Tabs Navigation - Desktop */}
       <div className="hidden sm:flex border-b border-slate-800 mb-6">
@@ -302,12 +325,6 @@ const ClassDetails = () => {
           onClick={() => setActiveTab('assignments')}
         >
           Assignments
-        </button>
-        <button
-          className={`px-4 py-2 font-medium ${activeTab === 'learning' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-300'}`}
-          onClick={() => setActiveTab('learning')}
-        >
-          Learning Assessment
         </button>
         <button
           className={`px-4 py-2 font-medium ${activeTab === 'feedback' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-300'}`}
@@ -377,23 +394,40 @@ const ClassDetails = () => {
 
             {classroom.assignments && classroom.assignments.length > 0 ? (
               <div className="space-y-4">
-                {classroom.assignments.map((assignment) => (
-                  <div key={assignment.asgnId || assignment.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-cyan-300 mb-1">{assignment.title}</h3>
-                        <p className="text-sm text-slate-400">{assignment.description || 'No description available'}</p>
+                {classroom.assignments.map((assignment) => {
+                  const isAttempted = attemptedAssignments.some(attempted => 
+                    attempted.id === (assignment.asgnId || assignment.id) || 
+                    attempted.asgnId === (assignment.asgnId || assignment.id)
+                  );
+                  
+                  return (
+                    <div key={assignment.asgnId || assignment.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold text-cyan-300">{assignment.title}</h3>
+                            {isAttempted && (
+                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">Attempted</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-400">{assignment.description || 'No description available'}</p>
+                        </div>
+                        <button
+                          onClick={() => takeAssignment(assignment.asgnId || assignment.id)}
+                          disabled={isAttempted}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center ${
+                            isAttempted 
+                              ? 'bg-slate-600 text-slate-400 cursor-not-allowed' 
+                              : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                          }`}
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          {isAttempted ? 'Already Attempted' : 'Attempt Assignment'}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => takeAssignment(assignment.asgnId || assignment.id)}
-                        className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        Attempt Assignment
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="bg-slate-800 p-4 sm:p-8 rounded-lg text-center">
@@ -503,9 +537,9 @@ const ClassDetails = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
               <h2 className="text-lg sm:text-xl font-bold text-cyan-400 mb-3 sm:mb-0">Overall Class Performance</h2>
               <div className="flex items-center bg-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg">
-                <Award className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400 mr-2" />
+                {/* <Award className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400 mr-2" />
                 <span className="text-base sm:text-lg font-bold">{classroom.overallFeedback.performance.score}%</span>
-                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-green-400 ml-2" />
+                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-green-400 ml-2" /> */}
               </div>
             </div>
 

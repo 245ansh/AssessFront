@@ -6,23 +6,16 @@ import { assignmentService } from '../services/assignmentService';
 import {
   Users,
   BookOpen,
-  Brain,
   Calendar,
-  BarChart2,
-  Clock,
   CheckCircle,
   AlertCircle,
-  PieChart,
-  Target,
-  Award,
-  MessageCircle,
-  UserPlus,
   FileText,
   Plus,
   ArrowLeft,
   X,
   Menu,
-  ChevronDown
+  ChevronDown,
+  Target
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -34,7 +27,9 @@ const TeacherClass = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [isAddingAssignment, setIsAddingAssignment] = useState(false);
-  const [isAddingAssessmentData, setIsAddingAssessmentData] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [assignmentQuestions, setAssignmentQuestions] = useState(null);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [newAssignment, setNewAssignment] = useState({
     title: '',
     description: '',
@@ -47,18 +42,32 @@ const TeacherClass = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Get logged-in teacher's name from localStorage
+  const getLoggedInTeacherName = () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    return user.username || 'Teacher';
+  };
+
   useEffect(() => {
     const fetchClassroomData = async () => {
       try {
         setLoading(true);
-        const [classroomResponse, assignmentsResponse] = await Promise.all([
-          classroomService.getClassroomByCode(classcode),
-          assignmentService.getAllAssignmentsByClassroom(classcode).catch(() => [])
-        ]);
-        console.log('Classroom:', classroomResponse);
-        console.log('Assignments:', assignmentsResponse);
-        setClassroom(classroomResponse);
-        setAssignmentsList(assignmentsResponse);
+        const classroom = await classroomService.getClassroomByCode(classcode);
+        const assignments = await assignmentService.getAllAssignmentsByClassroom(classcode).catch(() => []);
+        
+        // Fetch students if we have classroom ID
+        let students = [];
+        const classroomId = classroom?.id || classroom?.classroomId;
+        if (classroomId) {
+          students = await classroomService.getAllStudentsOfClassroom(classroomId).catch(() => []);
+        }
+        
+        console.log('Classroom:', classroom);
+        console.log('Assignments:', assignments);
+        console.log('Students:', students);
+        
+        setClassroom({ ...classroom, students });
+        setAssignmentsList(assignments);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching classroom data:", err);
@@ -75,38 +84,23 @@ const TeacherClass = () => {
   // Refresh data after adding a new assignment/topic
   const refreshClassroomData = async () => {
     try {
-      const [classroomResponse, assignmentsResponse] = await Promise.all([
-        classroomService.getClassroomByCode(classcode),
-        assignmentService.getAllAssignmentsByClassroom(classcode).catch(() => [])
-      ]);
-      setClassroom(classroomResponse);
-      setAssignmentsList(assignmentsResponse);
+      const classroom = await classroomService.getClassroomByCode(classcode);
+      const assignments = await assignmentService.getAllAssignmentsByClassroom(classcode).catch(() => []);
+      
+      // Fetch students if we have classroom ID
+      let students = [];
+      const classroomId = classroom?.id || classroom?.classroomId;
+      if (classroomId) {
+        students = await classroomService.getAllStudentsOfClassroom(classroomId).catch(() => []);
+      }
+      
+      setClassroom({ ...classroom, students });
+      setAssignmentsList(assignments);
     } catch (err) {
       console.error("Error refreshing classroom data:", err);
     }
   };
 
-  // Dummy performance metrics (would typically come from API)
-  const performanceMetrics = {
-    averageGrade: 82,
-    completionRate: 85,
-    participationRate: 95,
-    topPerformers: 5,
-    needsAttention: 2,
-    averageAssignmentScore: 78,
-    studentFeedbackPositive: 90,
-    studentFeedbackNegative: 10,
-  };
-
-  // Dummy student engagement data (would typically come from API)
-  const studentEngagement = {
-    daily: 90,
-    weekly: 95,
-    monthly: 92,
-    overall: 88,
-    lastWeek: 89,
-    thisWeek: 95,
-  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -124,10 +118,6 @@ const TeacherClass = () => {
   const navigate = useNavigate();
   const goBack = () => { navigate(-1) };
 
-  const handleAddAssessmentData = () => {
-    setIsAddingAssessmentData(true);
-  };
-
   const showStudentAssessment = (studentId) => {
     // Logic to show student assessment
     console.log(`Showing assessment for student ${studentId}`);
@@ -140,27 +130,27 @@ const TeacherClass = () => {
 
   const removeStudent = async (studentId) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/remove/${studentId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        withCredentials: 'true',
-      });
+      const classroomId = classroom?.id || classroom?.classroomId;
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to remove student');
+      if (!classroomId) {
+        throw new Error('Classroom ID not found');
       }
+      
+      // Add confirmation dialog
+      const confirmed = window.confirm('Are you sure you want to remove this student from the classroom?');
+      if (!confirmed) {
+        return;
+      }
+      
+      await classroomService.removeStudent(classroomId, studentId);
       
       // Refresh classroom data after removing a student
       await refreshClassroomData();
     } catch (err) {
       console.error('Error removing student:', err);
+      alert('Failed to remove student: ' + (err.message || 'Unknown error'));
     }
-  }
+  };
 
   const handleSubmitAssignment = async (e) => {
     e.preventDefault();
@@ -173,7 +163,7 @@ const TeacherClass = () => {
       const quizJson = await assignmentService.createAssignment({
         title: newAssignment.title,
         description: newAssignment.description,
-        classroomCode: classroom.classCode || classroom.classroomCode,
+        classroomCode: classroom?.classroomCode || classroom?.classCode || classcode,
         difficulty: newAssignment.difficulty,
         numMcqs: newAssignment.numMcqs,
         numWriting: newAssignment.numWriting,
@@ -207,21 +197,76 @@ const TeacherClass = () => {
     }
   };
 
-  const handleSubmitAssessmentData = (e) => {
-    e.preventDefault();
-    // Would typically send to API
-    console.log('Adding assessment data');
-    setIsAddingAssessmentData(false);
+  const handleClassDelete = async () => {
+    console.log('Classroom object:', classroom);
+    console.log('Classroom ID:', classroom?.id);
+    console.log('Classroom ID (classroomId):', classroom?.classroomId);
+    
+    const classroomId = classroom?.id || classroom?.classroomId;
+    
+    if (!classroomId) {
+      alert('Classroom ID not found');
+      return;
+    }
+    
+    // Add confirmation dialog
+    const confirmed = window.confirm(`Are you sure you want to delete the classroom "${actualClassName}"? This action cannot be undone and will remove all assignments and students.`);
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      await classroomService.deleteClassroomById(classroomId);
+      alert('Classroom deleted successfully!');
+      // Redirect to teacher dashboard after successful deletion
+      window.location.href = '/teacher-dashboard';
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      alert('Failed to delete classroom: ' + (error.message || 'Unknown error'));
+    }
   };
 
-  const handleClassDelete = async () => {
-    // Modal confirmation would be added here
+  const handleViewAssignment = async (assignment) => {
+    setSelectedAssignment(assignment);
+    setLoadingQuestions(true);
     try {
-      // API call would go here
-      console.log("Deleting class");
-      // Redirect after successful deletion
+      const questionsData = await assignmentService.getAssignmentById(assignment.id);
+      setAssignmentQuestions(questionsData);
     } catch (error) {
-      console.error("Error deleting class:", error);
+      console.error("Error fetching assignment questions:", error);
+      setAssignmentQuestions(null);
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
+  const handleCloseAssignment = () => {
+    setSelectedAssignment(null);
+    setAssignmentQuestions(null);
+  };
+
+  const handleDeleteAssignment = async (assignmentId) => {
+    if (!assignmentId) {
+      alert('Assignment ID not found');
+      return;
+    }
+    
+    // Add confirmation dialog
+    const confirmed = window.confirm('Are you sure you want to delete this assignment? This action cannot be undone.');
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      await assignmentService.deleteAssignment(assignmentId);
+      alert('Assignment deleted successfully!');
+      // Close the assignment modal if it's open
+      handleCloseAssignment();
+      // Refresh classroom data to show updated assignments list
+      await refreshClassroomData();
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      alert('Failed to delete assignment: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -248,23 +293,17 @@ const TeacherClass = () => {
     );
   }
 
+  // Get the class name from different possible field names
+  const actualClassName = classroom?.className || classroom?.name || classroom?.classroomName || classroom?.title || 'Untitled Class';
+
   const { 
-    className = 'Untitled Class',
     subject = '',  
     classDescription = '',
-    teacherName = '',
-    classJoinedDate = '',
-    classFeedback = 'No feedback available',
+    teacherName = getLoggedInTeacherName(),
     assignments = [],
     students = [],
   } = classroom || {};
-
-  // Format the date for display
-  const formattedDate = classJoinedDate ? new Date(classJoinedDate).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  }) : 'Unknown date';
+      
 
   const studentsCount = students?.length || 0;
   
@@ -280,7 +319,7 @@ const TeacherClass = () => {
             <ArrowLeft className="text-cyan-400" />
           </button>
           <div>
-            <h1 className="text-xl md:text-3xl font-bold text-cyan-400 break-words">{className}</h1>
+            <h1 className="text-xl md:text-3xl font-bold text-cyan-400 break-words">{actualClassName}</h1>
             <p className="text-sm md:text-base text-slate-400 mt-1">{classDescription}</p>
           </div>
         </div>
@@ -312,7 +351,7 @@ const TeacherClass = () => {
         
         {mobileMenuOpen && (
           <div className="absolute z-10 mt-1 w-full bg-slate-800 rounded-lg shadow-xl">
-            {['overview', 'assignments', 'students', 'analytics'].map((tab) => (
+            {['overview', 'assignments', 'students'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => {
@@ -333,7 +372,7 @@ const TeacherClass = () => {
 
       {/* Navigation Tabs - Desktop */}
       <div className="hidden md:flex space-x-4 mb-6 border-b border-slate-800 overflow-x-auto">
-        {['overview', 'assignments', 'students', 'analytics'].map((tab) => (
+        {['overview', 'assignments', 'students'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -377,59 +416,6 @@ const TeacherClass = () => {
               </div>
             </div>
 
-            {/* Performance Overview */}
-            <div className="bg-slate-900 p-4 md:p-6 rounded-xl border border-slate-800">
-              <h2 className="text-lg md:text-xl font-bold text-cyan-400 mb-3 md:mb-4 flex items-center">
-                <BarChart2 className="mr-2" size={20} /> Class Performance
-              </h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="space-y-3 md:space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm md:text-base text-slate-400">Average Grade</span>
-                    <span className="text-base md:text-lg font-bold text-green-400">
-                      {performanceMetrics.averageGrade}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm md:text-base text-slate-400">Participation Rate</span>
-                    <span className="text-base md:text-lg font-bold text-blue-400">
-                      {performanceMetrics.participationRate}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm md:text-base text-slate-400">Top Performers</span>
-                    <span className="text-base md:text-lg font-bold text-purple-400">
-                      {performanceMetrics.topPerformers} students
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm md:text-base text-slate-400">Avg. Assignment Score</span>
-                    <span className="text-base md:text-lg font-bold text-cyan-400">
-                      {performanceMetrics.averageAssignmentScore}%
-                    </span>
-                  </div>
-                </div>
-                <div className="bg-slate-800 rounded-lg p-3 md:p-4">
-                  <h3 className="text-xs md:text-sm font-medium text-slate-300 mb-2 md:mb-3">Student Engagement</h3>
-                  <div className="space-y-2">
-                    {Object.entries(studentEngagement).map(([period, rate]) => (
-                      <div key={period} className="flex justify-between items-center">
-                        <span className="capitalize text-xs md:text-sm text-slate-400">{period}</span>
-                        <div className="flex items-center">
-                          <div className="w-16 md:w-32 h-2 bg-slate-700 rounded-full mr-2">
-                            <div
-                              className="h-full bg-cyan-400 rounded-full"
-                              style={{ width: `${rate}%` }}
-                            />
-                          </div>
-                          <span className="text-xs md:text-sm font-medium">{rate}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* Recent Assignments */}
             <div className="bg-slate-900 p-4 md:p-6 rounded-xl border border-slate-800">
@@ -451,19 +437,31 @@ const TeacherClass = () => {
                       key={assignment.id || index}
                       className="bg-slate-800 p-3 md:p-4 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between hover:bg-slate-700 transition-colors gap-2"
                     >
-                      <div className="flex items-center space-x-3">
+                      <div
+                        onClick={() => handleViewAssignment(assignment)}
+                        className="flex items-center space-x-3 flex-1 cursor-pointer"
+                      >
                         <FileText className="text-slate-400 shrink-0" size={18} />
-                        <div>
+                        <div className="flex-1">
                           <h3 className="font-medium text-sm md:text-base">{assignment.title || 'Untitled Assignment'}</h3>
-                          <p className="text-xs md:text-sm text-slate-400">
-                            {assignment.dueDate ? `Due: ${new Date(assignment.dueDate).toLocaleDateString()}` : 'No due date'}
-                          </p>
                         </div>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(assignment.status || 'active')} self-start sm:self-auto`}>
-                        {(assignment.status || 'active').charAt(0).toUpperCase() + 
-                         (assignment.status || 'active').slice(1)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(assignment.status || 'active')}`}>
+                          {(assignment.status || 'active').charAt(0).toUpperCase() + 
+                           (assignment.status || 'active').slice(1)}
+                        </span>
+                        {/* <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteAssignment(assignment.id);
+                          }}
+                          className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                          title="Delete assignment"
+                        >
+                          <X size={16} />
+                        </button> */}
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -488,10 +486,6 @@ const TeacherClass = () => {
                   <span className="text-white text-sm md:text-base mt-1 sm:mt-0">{subject}</span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-start">
-                  <span className="text-slate-400 sm:w-32 text-sm md:text-base">Created on:</span>
-                  <span className="text-white text-sm md:text-base mt-1 sm:mt-0">{formattedDate}</span>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-start">
                   <span className="text-slate-400 sm:w-32 text-sm md:text-base">Teacher:</span>
                   <span className="text-white text-sm md:text-base mt-1 sm:mt-0">{teacherName}</span>
                 </div>
@@ -499,40 +493,6 @@ const TeacherClass = () => {
                   <span className="text-slate-400 sm:w-32 text-sm md:text-base">Class Code:</span>
                   <span className="text-white text-sm md:text-base mt-1 sm:mt-0">{classcode}</span>
                 </div>
-              </div>
-            </div>
-            
-            {/* Learning Assessment Status */}
-            <div className="bg-slate-900 p-4 md:p-6 rounded-xl border border-slate-800">
-              <h2 className="text-lg md:text-xl font-bold text-cyan-400 flex items-center mb-3 md:mb-4">
-                <Brain className="mr-2" size={20} /> Learning Assessment
-              </h2>
-              <div className="p-3 md:p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center bg-yellow-500/10 border border-yellow-500/20 gap-3">
-                <div className="flex items-center">
-                  <AlertCircle className="text-yellow-400 mr-2 md:mr-3 shrink-0" size={18} />
-                  <div>
-                    <p className="font-medium text-yellow-400 text-sm md:text-base">Assessment Pending</p>
-                    <p className="text-xs md:text-sm text-slate-400 mt-1">
-                      Waiting for more student data
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleAddAssessmentData}
-                  className="bg-cyan-600 hover:bg-cyan-700 px-3 py-1 rounded-lg transition-colors text-xs md:text-sm w-full sm:w-auto"
-                >
-                  Add Data
-                </button>
-              </div>
-            </div>
-
-            {/* Class Feedback */}
-            <div className="bg-slate-900 p-4 md:p-6 rounded-xl border border-slate-800">
-              <h2 className="text-lg md:text-xl font-bold text-cyan-400 flex items-center mb-3 md:mb-4">
-                <MessageCircle className="mr-2" size={20} /> Class Feedback
-              </h2>
-              <div className="p-3 md:p-4 bg-slate-800 rounded-lg">
-                <p className="text-slate-300 text-sm md:text-base">{classFeedback}</p>
               </div>
             </div>
           </div>
@@ -608,51 +568,6 @@ const TeacherClass = () => {
         </div>
       )}
 
-      {activeTab === 'analytics' && (
-        <div className="space-y-4 md:space-y-6">
-          <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3 md:mb-4">Analytics</h2>
-
-          {/* Overall Class Performance Analytics */}
-          <div className="bg-slate-900 p-4 md:p-6 rounded-xl border border-slate-800">
-            <h3 className="text-lg md:text-xl font-bold text-cyan-400 mb-3 md:mb-4 flex items-center">
-              <PieChart className="mr-2" size={20} /> Overall Class Performance
-            </h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <div className="space-y-2 md:space-y-3">
-                <p className="text-slate-300 text-sm md:text-base">Average Grade: <span className="text-cyan-200">{performanceMetrics.averageGrade}%</span></p>
-                <p className="text-slate-300 text-sm md:text-base">Completion Rate: <span className="text-cyan-200">{performanceMetrics.completionRate}%</span></p>
-                <p className="text-slate-300 mb-2">Participation Rate: <span className="text-cyan-200">{performanceMetrics.participationRate}%</span></p>
-                <p className="text-slate-300 mb-2">Average Assignment Score: <span className="text-cyan-200">{performanceMetrics.averageAssignmentScore}%</span></p>
-              </div>
-              <div>
-                <p className="text-slate-300 mb-2">Top Performers: <span className="text-cyan-200">{performanceMetrics.topPerformers} students</span></p>
-                <p className="text-slate-300 mb-2">Needs Attention: <span className="text-cyan-200">{performanceMetrics.needsAttention} students</span></p>
-                <p className="text-slate-300 mb-2">Positive Student Feedback: <span className="text-cyan-200">{performanceMetrics.studentFeedbackPositive}%</span></p>
-                <p className="text-slate-300 mb-2">Negative Student Feedback: <span className="text-cyan-200">{performanceMetrics.studentFeedbackNegative}%</span></p>
-              </div>
-            </div>
-          </div>
-
-          {/* Student Engagement Analytics */}
-          <div className="bg-slate-900 p-6 rounded-xl border border-slate-800">
-            <h3 className="text-xl font-bold text-cyan-400 mb-4 flex items-center">
-              <BarChart2 className="mr-2" /> Student Engagement Trends
-            </h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <p className="text-slate-300 mb-2">Daily Engagement: <span className="text-cyan-200">{studentEngagement.daily}%</span></p>
-                <p className="text-slate-300 mb-2">Weekly Engagement: <span className="text-cyan-200">{studentEngagement.weekly}%</span></p>
-                <p className="text-slate-300 mb-2">Monthly Engagement: <span className="text-cyan-200">{studentEngagement.monthly}%</span></p>
-              </div>
-              <div>
-                <p className="text-slate-300 mb-2">Overall Engagement: <span className="text-cyan-200">{studentEngagement.overall}%</span></p>
-                <p className="text-slate-300 mb-2">Last Week Engagement: <span className="text-cyan-200">{studentEngagement.lastWeek}%</span></p>
-                <p className="text-slate-300 mb-2">This Week Engagement: <span className="text-cyan-200">{studentEngagement.thisWeek}%</span></p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Add Assignment Dialog */}
       {isAddingAssignment && (
@@ -785,117 +700,111 @@ const TeacherClass = () => {
         </div>
       )}
 
-      {/* Add Learning Assessment Data Dialog */}
-      {isAddingAssessmentData && (
-  <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50">
-    <div className="bg-slate-900 rounded-xl p-6 w-full max-w-2xl">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-cyan-400">Add Learning Assessment Data</h2>
-        <button
-          onClick={() => setIsAddingAssessmentData(false)}
-          className="text-slate-400 hover:text-white"
-        >
-          <X size={24} />
-        </button>
-      </div>
-      <form className="space-y-6" onSubmit={handleSubmitAssessmentData}>
-        {/* Video Data */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-cyan-300">Video Resource</h3>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Video Link
-            </label>
-            <input
-              type="url"
-              name="videolink"
-              placeholder="https://www.youtube.com/watch?v=..."
-              className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Video Description
-            </label>
-            <textarea
-              name="videodescription"
-              placeholder="Describe the video content and learning objectives..."
-              className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent h-24"
-            />
-          </div>
-        </div>
+      {/* Assignment Questions Modal */}
+      {selectedAssignment && (
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-cyan-400">{selectedAssignment.title}</h2>
+                <p className="text-slate-400 mt-1">{selectedAssignment.description}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleDeleteAssignment(selectedAssignment.id)}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <X size={16} />
+                  Delete Assignment
+                </button>
+                <button
+                  onClick={handleCloseAssignment}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
 
-        {/* Audio Data */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-cyan-300">Audio Resource</h3>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Audio Link
-            </label>
-            <input
-              type="url"
-              name="audiolink"
-              placeholder="https://www.youtube.com/watch?v=..."
-              className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Audio Description
-            </label>
-            <textarea
-              name="audiodescription"
-              placeholder="Describe the audio content and learning objectives..."
-              className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent h-24"
-            />
-          </div>
-        </div>
+            {loadingQuestions ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+                <p className="text-slate-400 mt-4">Loading questions...</p>
+              </div>
+            ) : assignmentQuestions?.questions ? (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-cyan-300">Generated Questions</h3>
+                  <span className="text-sm text-slate-400">
+                    {assignmentQuestions.questions.length} question{assignmentQuestions.questions.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                
+                {assignmentQuestions.questions.map((question, index) => (
+                  <div key={question.qid || index} className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                    <div className="flex items-start gap-3">
+                      <span className="flex-shrink-0 w-8 h-8 bg-cyan-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-white font-medium mb-3">{question.text}</p>
+                        
+                        {question.type === 'MCQ' && question.mcq ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-1 gap-2">
+                              <div className="flex items-center gap-2 p-2 bg-slate-700 rounded">
+                                <span className="text-cyan-400 font-medium">A.</span>
+                                <span className="text-slate-300">{question.mcq.option1}</span>
+                              </div>
+                              <div className="flex items-center gap-2 p-2 bg-slate-700 rounded">
+                                <span className="text-cyan-400 font-medium">B.</span>
+                                <span className="text-slate-300">{question.mcq.option2}</span>
+                              </div>
+                              <div className="flex items-center gap-2 p-2 bg-slate-700 rounded">
+                                <span className="text-cyan-400 font-medium">C.</span>
+                                <span className="text-slate-300">{question.mcq.option3}</span>
+                              </div>
+                              <div className="flex items-center gap-2 p-2 bg-slate-700 rounded">
+                                <span className="text-cyan-400 font-medium">D.</span>
+                                <span className="text-slate-300">{question.mcq.option4}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : question.type === 'PARAGRAPH' ? (
+                          <div className="bg-slate-700 rounded p-3">
+                            <p className="text-slate-300 italic">Essay question - requires written response</p>
+                          </div>
+                        ) : null}
+                        
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className="text-xs px-2 py-1 bg-cyan-600/20 text-cyan-400 rounded">
+                            {question.type}
+                          </span>
+                          <span className="text-xs text-slate-500">ID: {question.qid}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-slate-400">No questions available for this assignment.</p>
+              </div>
+            )}
 
-        {/* Text Data */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-cyan-300">Text Resource</h3>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Text Link
-            </label>
-            <input
-              type="url"
-              name="textlink"
-              placeholder="https://www.example.com/article..."
-              className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Text Description
-            </label>
-            <textarea
-              name="textdescription"
-              placeholder="Describe the text content and learning objectives..."
-              className="w-full bg-slate-800 rounded-lg border border-slate-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent h-24"
-            />
+            <div className="flex justify-end mt-6 pt-4 border-t border-slate-800">
+              <button
+                onClick={handleCloseAssignment}
+                className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="flex space-x-3 mt-6">
-          <button
-            type="button"
-            onClick={() => setIsAddingAssessmentData(false)}
-            className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white py-2 rounded-lg transition-colors"
-          >
-            Add Assessment Data
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
     </div>
   );
 };

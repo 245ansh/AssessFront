@@ -118,6 +118,15 @@ export const classroomService = {
         assignments: classroom.assignments || [],
         assignmentCount: classroom.assignments?.length || 0,
         totalAssignments: classroom.totalAssignments || classroom.assignments?.length || 0,
+        // Additional fields for ClassDetails page
+        teacherName: classroom.teacherName || (classroom.teacher && classroom.teacher.fullName) || 'Unknown Teacher',
+        description: classroom.description || classroom.classDescription || 'No description available',
+        createdAt: classroom.createdAt || classroom.createdDate || new Date().toISOString(),
+        teacher: classroom.teacher || null,
+        classDescription: classroom.description || classroom.classDescription || 'No description available',
+        // Ensure backward compatibility
+        name: classroom.name,
+        id: classroom.id,
       };
     } catch (error) {
       console.error("Error fetching classroom by ID:", error);
@@ -159,7 +168,7 @@ export const classroomService = {
       }
       
       // Now get full classroom data using the ID
-      return await classroomService.getClassroomById(classroom.classroomId);
+      return await classroom;
     } catch (error) {
       console.error("Error fetching classroom by code:", error);
       throw error;
@@ -200,6 +209,40 @@ export const classroomService = {
       return response.data;
     } catch (error) {
       console.error("Error joining classroom:", error);
+      throw error;
+    }
+  },
+
+  // Get all students of a classroom
+  getAllStudentsOfClassroom: async (classroomId) => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/${classroomId}/students`,
+        {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching classroom students:', error);
+      throw error;
+    }
+  },
+
+  // Delete classroom by ID
+  deleteClassroomById: async (classroomId) => {
+    try {
+      const response = await axios.delete(
+        `${API_BASE_URL}/${classroomId}`,
+        {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting classroom:', error);
       throw error;
     }
   },

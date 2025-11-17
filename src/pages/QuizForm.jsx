@@ -4,6 +4,7 @@ import {
   Send,
   CheckCircle,
   HelpCircle,
+  Loader,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
@@ -17,6 +18,7 @@ const QuizForm = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // -------------------------------------------------------------
   // LOAD QUESTIONS + TEST ID
@@ -117,6 +119,8 @@ const QuizForm = () => {
     const payload = buildFinalPayload();
     console.log("Evaluation Payload:", payload);
 
+    setIsSubmitting(true);
+
     try {
       const res = await axios.post(
         `http://localhost:2452/api/evaluate/${testId}`,
@@ -137,6 +141,8 @@ const QuizForm = () => {
     } catch (err) {
       console.error("Evaluation Error:", err);
       alert("Error during evaluation.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -185,9 +191,23 @@ const QuizForm = () => {
 
               <button
                 onClick={handleSubmitQuiz}
-                className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg flex items-center"
+                disabled={isSubmitting}
+                className={`px-4 py-2 rounded-lg flex items-center ${
+                  isSubmitting
+                    ? 'bg-slate-600 text-slate-300 cursor-not-allowed'
+                    : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                }`}
               >
-                <Send className="mr-2 h-4 w-4" /> Submit
+                {isSubmitting ? (
+                  <>
+                    <Loader className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" /> Submit
+                  </>
+                )}
               </button>
             </div>
           </div>
