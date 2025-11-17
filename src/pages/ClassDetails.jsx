@@ -1,26 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ArrowLeft, 
-  FileText, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  MessageSquare, 
-  Brain, 
-  Calendar, 
-  Users, 
+// src/pages/ClassDetails.jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  ArrowLeft,
+  FileText,
+  CheckCircle,
+  XCircle,
+  MessageSquare,
+  Brain,
+  Calendar,
+  Users,
   BookOpen,
   AlertCircle,
-  Download,
-  Upload,
   ExternalLink,
   Award,
   BarChart,
-  Eye,
   TrendingUp,
   Target,
   Lightbulb,
-  BookMarked,
   Menu,
   X,
   Play
@@ -55,39 +51,42 @@ const ClassDetails = () => {
       detailedFeedback: ''
     }
   });
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // FEEDBACK specific states
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState(null);
+  const [feedbackText, setFeedbackText] = useState(null);
+  const [feedbackFetchedOnce, setFeedbackFetchedOnce] = useState(false);
+
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('assignments');
   const { classroomId } = useParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
   useEffect(() => {
     const fetchClassroomData = async () => {
       try {
-        // Add debugging and validation
         console.log('ClassDetails: classroomId from params:', classroomId);
-        
+
         if (!classroomId || classroomId === '0' || classroomId === 'undefined') {
           throw new Error('Invalid classroom ID provided');
         }
-        
+
         setLoading(true);
         const response = await classroomService.getClassroomById(classroomId);
-        
+
         console.log('API Response:', response);
-        console.log('Assignments from API:', response.assignments);
-        
-        // Transform data to match expected format
+
         const transformedData = {
           className: response.className || response.subject || 'Unknown Class',
           classJoinedDate: response.createdAt || new Date().toISOString(),
-          teacherName: response.teacherName || 'Unknown Teacher',
+          teacherName: (response.teacher && response.teacher.fullName) || response.teacherName || 'Unknown Teacher',
           subject: response.subject || 'General',
           classDescription: response.description || 'No description available',
           assignments: response.assignments || [],
-          // until we have API endpoints for these
           learningAssessment: {
             completed: false,
             lastAssessmentDate: 'Feb 15, 2025',
@@ -114,75 +113,90 @@ const ClassDetails = () => {
                 'Complex integration techniques'
               ]
             },
-            progressInsights: [
-              {
-                topic: 'Calculus',
-                proficiency: 90,
-                comment: 'Excellent understanding of derivatives and basic integration'
-              },
-              {
-                topic: 'Algebra',
-                proficiency: 85,
-                comment: 'Good grasp of matrix operations, needs work on complex equations'
-              },
-              {
-                topic: 'Trigonometry',
-                proficiency: 88,
-                comment: 'Strong foundation in identities, room for improvement in applications'
-              }
+            progressInsights: response.progressInsights || [
+              { topic: 'Calculus', proficiency: 90, comment: 'Excellent understanding' },
+              { topic: 'Algebra', proficiency: 85, comment: 'Good grasp' },
+              { topic: 'Trigonometry', proficiency: 88, comment: 'Strong foundation' }
             ],
-            recommendations: [
+            recommendations: response.recommendations || [
               'Focus on time management strategies during problem-solving',
               'Practice showing detailed steps in solutions',
               'Dedicate extra time to complex integration techniques',
               'Continue strong performance in calculus fundamentals'
             ],
-            detailedFeedback: `Your performance in Advanced Mathematics has been consistently strong, demonstrating a particularly impressive grasp of calculus concepts and problem-solving techniques. Your work shows a natural aptitude for mathematical thinking and a dedicated approach to learning.
-
-In calculus, your understanding of derivatives and basic integration is exemplary, scoring in the top percentile of the class. Your solutions demonstrate clear logical progression and strong analytical skills. However, when dealing with complex integration problems, there's room for improvement in showing detailed step-by-step work.
-
-Your algebra skills are solid, particularly in matrix operations and linear systems. The occasional challenges with complex equations could be addressed through more focused practice on breaking down multi-step problems into smaller, manageable components.
-
-Regarding trigonometry, you've built a strong foundation in fundamental identities. To enhance your performance further, focus on applying these concepts to real-world problems and complex mathematical scenarios.
-
-Time management during assessments has been identified as an area for development. Consider practicing with timed exercises to improve efficiency while maintaining accuracy. Remember, showing your work clearly not only helps in grading but also in identifying any misconceptions or areas needing clarification.
-
-Overall, your trajectory in this course is positive, with your dedication to learning and strong problem-solving abilities setting you up for continued success. Keep focusing on the recommended improvement areas while maintaining your strengths, and you're well-positioned to excel in advanced mathematical concepts.`
+            detailedFeedback: response.detailedFeedback || `Your performance in Advanced Mathematics has been consistently strong...`
           }
         };
-        console.log(response.data);
+
         setClassroom(transformedData);
       } catch (err) {
         console.error('Error fetching classroom data:', err);
-        
-        // If it's an invalid ID error, navigate back to dashboard
+
         if (err.message === 'Invalid classroom ID provided') {
           setError('Invalid classroom ID. Redirecting to dashboard...');
           setTimeout(() => {
             navigate('/student-dashboard');
-          }, 2000);
+          }, 1500);
         } else {
-          setError(err.message || 'Failed to load classroom details');
+          setError(err.response?.data?.message || err.message || 'Failed to load classroom details');
         }
       } finally {
         setLoading(false);
       }
     };
     fetchClassroomData();
-  }, [classroomId]);
-  
-  const takeAssignment = (assignmentId) => { 
-    navigate(`/quizform/${assignmentId}`); 
+  }, [classroomId, navigate]);
+
+  // fetch feedback from backend
+  const fetchFeedback = useCallback(async (opts = { force: false }) => {
+    // don't re-fetch repeatedly unless forced
+    if (feedbackFetchedOnce && !opts.force) return;
+
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+    try {
+      const res = await classroomService.getClassFeedback(classroomId);
+      // backend is supposed to return a string (ai feedback)
+      // handle null/undefined
+      const text = typeof res === 'string' ? res.trim() : (res?.feedback || '');
+      setFeedbackText(text);
+      setFeedbackFetchedOnce(true);
+
+      // also fill into classroom.overallFeedback.detailedFeedback for display (optional)
+      setClassroom(prev => ({
+        ...prev,
+        overallFeedback: {
+          ...prev.overallFeedback,
+          detailedFeedback: text || prev.overallFeedback.detailedFeedback
+        }
+      }));
+    } catch (err) {
+      console.error('fetchFeedback err', err);
+      setFeedbackError(err.response?.data?.message || err.message || 'Failed to fetch feedback');
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [classroomId, feedbackFetchedOnce]);
+
+  // when user switches to feedback tab -> fetch feedback automatically
+  useEffect(() => {
+    if (activeTab === 'feedback') {
+      fetchFeedback();
+    }
+  }, [activeTab, fetchFeedback]);
+
+  const takeAssignment = (assignmentId) => {
+    navigate(`/quizform/${assignmentId}`);
   };
-  
-  const goBack = () => { 
-    navigate(-1); 
+
+  const goBack = () => {
+    navigate(-1);
   };
-  
-  const viewSolution = (assignmentId) => { 
-    navigate(`/assignment-solution/${assignmentId}`); 
+
+  const viewSolution = (assignmentId) => {
+    navigate(`/assignment-solution/${assignmentId}`);
   };
-  
+
   const viewFeedback = (assignmentId) => {
     navigate(`/assignment-feedback/${assignmentId}`);
   };
@@ -213,8 +227,8 @@ Overall, your trajectory in this course is positive, with your dedication to lea
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-red-400 mb-2">Error Loading Classroom</h2>
           <p className="text-slate-300 mb-4">{error}</p>
-          <button 
-            onClick={goBack} 
+          <button
+            onClick={goBack}
             className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg"
           >
             Go Back
@@ -232,7 +246,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
           <button onClick={goBack} className="bg-slate-800 p-2 rounded-full mr-3 hover:bg-slate-700 transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          
+
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-cyan-400">{classroom.className}</h1>
           </div>
@@ -245,7 +259,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
           </button>
         </div>
       </div>
-      
+
       {/* Classroom Overview Card */}
       <div className="bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 border border-slate-800 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
@@ -256,7 +270,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
               <p className="font-semibold text-sm sm:text-base">{classroom.classJoinedDate}</p>
             </div>
           </div>
-          
+
           <div className="bg-slate-800 p-3 sm:p-4 rounded-lg flex items-center">
             <Users className="text-cyan-500 mr-3 h-5 w-5" />
             <div>
@@ -264,7 +278,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
               <p className="font-semibold text-sm sm:text-base">{classroom.teacherName}</p>
             </div>
           </div>
-          
+
           <div className="bg-slate-800 p-3 sm:p-4 rounded-lg flex items-center">
             <BookOpen className="text-cyan-500 mr-3 h-5 w-5" />
             <div>
@@ -273,42 +287,42 @@ Overall, your trajectory in this course is positive, with your dedication to lea
             </div>
           </div>
         </div>
-        
+
         <p className="text-slate-300 text-sm sm:text-base">{classroom.classDescription}</p>
       </div>
-      
+
       {/* Tabs Navigation - Desktop */}
       <div className="hidden sm:flex border-b border-slate-800 mb-6">
-        <button 
+        <button
           className={`px-4 py-2 font-medium ${activeTab === 'assignments' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-300'}`}
           onClick={() => setActiveTab('assignments')}
         >
           Assignments
         </button>
-        <button 
+        <button
           className={`px-4 py-2 font-medium ${activeTab === 'learning' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-300'}`}
           onClick={() => setActiveTab('learning')}
         >
           Learning Assessment
         </button>
-        <button 
+        <button
           className={`px-4 py-2 font-medium ${activeTab === 'feedback' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-slate-300'}`}
           onClick={() => setActiveTab('feedback')}
         >
           Class Feedback
         </button>
       </div>
-      
+
       {/* Mobile Tabs Navigation */}
       <div className="sm:hidden mb-4">
         <div className="relative">
-          <button 
+          <button
             onClick={toggleMobileMenu}
             className="w-full bg-slate-800 py-3 px-4 rounded-lg flex justify-between items-center"
           >
             <span className="font-medium text-cyan-400">
-              {activeTab === 'assignments' ? 'Assignments' : 
-               activeTab === 'learning' ? 'Learning Assessment' : 'Class Feedback'}
+              {activeTab === 'assignments' ? 'Assignments' :
+                activeTab === 'learning' ? 'Learning Assessment' : 'Class Feedback'}
             </span>
             {mobileMenuOpen ? (
               <X className="h-5 w-5" />
@@ -316,10 +330,10 @@ Overall, your trajectory in this course is positive, with your dedication to lea
               <Menu className="h-5 w-5" />
             )}
           </button>
-          
+
           {mobileMenuOpen && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 rounded-lg z-10 shadow-lg">
-              <button 
+              <button
                 className={`w-full text-left px-4 py-3 ${activeTab === 'assignments' ? 'bg-slate-700 text-cyan-400' : 'text-slate-300'}`}
                 onClick={() => {
                   setActiveTab('assignments');
@@ -328,7 +342,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
               >
                 Assignments
               </button>
-              <button 
+              <button
                 className={`w-full text-left px-4 py-3 ${activeTab === 'learning' ? 'bg-slate-700 text-cyan-400' : 'text-slate-300'}`}
                 onClick={() => {
                   setActiveTab('learning');
@@ -337,7 +351,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
               >
                 Learning Assessment
               </button>
-              <button 
+              <button
                 className={`w-full text-left px-4 py-3 ${activeTab === 'feedback' ? 'bg-slate-700 text-cyan-400' : 'text-slate-300'}`}
                 onClick={() => {
                   setActiveTab('feedback');
@@ -350,13 +364,13 @@ Overall, your trajectory in this course is positive, with your dedication to lea
           )}
         </div>
       </div>
-      
+
       {/* Content based on active tab */}
       <div className="bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 border border-slate-800">
         {activeTab === 'assignments' && (
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-cyan-400 mb-6">Assignments</h2>
-            
+
             {classroom.assignments && classroom.assignments.length > 0 ? (
               <div className="space-y-4">
                 {classroom.assignments.map((assignment) => (
@@ -389,27 +403,27 @@ Overall, your trajectory in this course is positive, with your dedication to lea
             )}
           </div>
         )}
-        
+
         {activeTab === 'learning' && (
           <div>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
               <h2 className="text-lg sm:text-xl font-bold text-cyan-400 mb-3 sm:mb-0">Learning Pattern Assessment</h2>
-              
-              <button 
+
+              <button
                 onClick={handleAssessmentAttempt}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center transition-colors"
               >
                 <Brain className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> {classroom.learningAssessment.completed ? 'Retake Assessment' : 'Take Assessment'}
               </button>
             </div>
-            
+
             {classroom.learningAssessment.completed ? (
               <div className="space-y-4 sm:space-y-6">
                 <div className="bg-slate-800 p-3 sm:p-4 rounded-lg">
                   <h3 className="text-sm sm:text-md font-semibold text-cyan-300 mb-2 sm:mb-3">Last Assessment</h3>
                   <p className="text-xs sm:text-sm text-slate-400">You completed your learning assessment on {classroom.learningAssessment.lastAssessmentDate}</p>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-800 p-3 sm:p-4 rounded-lg">
                     <h3 className="text-sm sm:text-md font-semibold text-green-400 mb-2 sm:mb-3 flex items-center">
@@ -424,7 +438,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
                       ))}
                     </ul>
                   </div>
-                  
+
                   <div className="bg-slate-800 p-3 sm:p-4 rounded-lg">
                     <h3 className="text-sm sm:text-md font-semibold text-yellow-400 mb-2 sm:mb-3 flex items-center">
                       <AlertCircle className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> Areas to Improve
@@ -439,7 +453,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
                     </ul>
                   </div>
                 </div>
-                
+
                 <div className="bg-slate-800 p-3 sm:p-4 rounded-lg">
                   <h3 className="text-sm sm:text-md font-semibold text-cyan-300 mb-2 sm:mb-3 flex items-center">
                     <BarChart className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> Recommended Learning Strategies
@@ -455,7 +469,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
                     ))}
                   </ul>
                 </div>
-                
+
                 <div className="flex justify-end">
                   <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center transition-colors">
                     <ExternalLink className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> View Full Assessment
@@ -469,7 +483,7 @@ Overall, your trajectory in this course is positive, with your dedication to lea
                 <p className="text-slate-400 mb-4 sm:mb-6 max-w-md mx-auto text-sm sm:text-base">
                   Take a short assessment to identify your learning strengths and receive personalized strategies to improve your performance in this class.
                 </p>
-                <button 
+                <button
                   className="bg-purple-600 hover:bg-purple-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg text-sm sm:text-md flex items-center mx-auto transition-colors"
                   onClick={handleAssessmentAttempt}
                 >
@@ -523,35 +537,24 @@ Overall, your trajectory in this course is positive, with your dedication to lea
               </div>
             </div>
 
-            {/* Topic Progress */}
-            {/* <div className="bg-slate-800 p-6 rounded-lg mb-6">
-              <h3 className="text-lg font-semibold text-cyan-400 mb-4 flex items-center">
-                <BookMarked className="mr-2 h-5 w-5" /> Topic Progress
-              </h3>
-              <div className="space-y-4">
-                {classroom.overallFeedback.progressInsights.map((topic, index) => (
-                  <div key={index} className="bg-slate-700 p-4 rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium text-white">{topic.topic}</h4>
-                      <span className="text-cyan-400 font-semibold">{topic.proficiency}%</span>
-                    </div>
-                    <div className="w-full bg-slate-600 rounded-full h-2 mb-2">
-                      <div 
-                        className="bg-cyan-400 h-2 rounded-full" 
-                        style={{ width: `${topic.proficiency}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-slate-300">{topic.comment}</p>
-                  </div>
-                ))}
-              </div>
-            </div> */}
-
             {/* Recommendations */}
             <div className="bg-slate-800 p-6 rounded-lg mb-6">
-              <h3 className="text-lg font-semibold text-purple-400 mb-4 flex items-center">
-                <Lightbulb className="mr-2 h-5 w-5" /> Recommendations for Improvement
-              </h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-semibold text-purple-400 flex items-center">
+                  <Lightbulb className="mr-2 h-5 w-5" /> Recommendations for Improvement
+                </h3>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => fetchFeedback({ force: true })}
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded-md text-sm"
+                    disabled={feedbackLoading}
+                  >
+                    {feedbackLoading ? 'Generating...' : 'Regenerate AI Feedback'}
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-3">
                 {classroom.overallFeedback.recommendations.map((recommendation, index) => (
                   <div key={index} className="bg-slate-700 p-4 rounded-lg flex items-start">
@@ -566,15 +569,53 @@ Overall, your trajectory in this course is positive, with your dedication to lea
 
             {/* Detailed Written Feedback */}
             <div className="bg-slate-800 p-6 rounded-lg">
-              <h3 className="text-lg font-semibold text-cyan-400 mb-4 flex items-center">
-                <MessageSquare className="mr-2 h-5 w-5" /> Detailed Feedback
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-cyan-400 flex items-center">
+                  <MessageSquare className="mr-2 h-5 w-5" /> Detailed Feedback
+                </h3>
+
+                {feedbackLoading && (
+                  <div className="text-sm text-slate-400">Fetching AI feedback...</div>
+                )}
+              </div>
+
               <div className="prose prose-invert max-w-none">
-                {classroom.overallFeedback.detailedFeedback.split('\n\n').map((paragraph, index) => (
-                  <p key={index} className="text-slate-300 mb-4 leading-relaxed">
-                    {paragraph}
-                  </p>
-                ))}
+                {/* priority: show feedbackText if backend returned something,
+                    else show classroom.overallFeedback.detailedFeedback as fallback */}
+                {feedbackError && (
+                  <div className="bg-rose-900/30 text-rose-300 p-3 rounded mb-4">
+                    {feedbackError}
+                  </div>
+                )}
+
+                {!feedbackLoading && !feedbackError && (!feedbackText || feedbackText.length === 0) && (
+                  <div className="bg-slate-700 p-4 rounded text-slate-300">
+                    <p className="mb-2">No AI feedback available yet.</p>
+                    <p className="text-sm text-slate-400">Attempt at least one assignment in this classroom to generate an AI evaluation.</p>
+
+                    <div className="mt-4">
+                      <button
+                        onClick={() => fetchFeedback({ force: true })}
+                        className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-md"
+                      >
+                        Generate AI Feedback Now
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!feedbackLoading && !feedbackError && feedbackText && feedbackText.length > 0 && (
+                  feedbackText.split('\n\n').map((para, idx) => (
+                    <p key={idx} className="text-slate-300 mb-4 leading-relaxed">{para}</p>
+                  ))
+                )}
+
+                {/* fallback: if no feedbackText but classroom has a prefilled detailedFeedback */}
+                {!feedbackLoading && !feedbackError && !feedbackText && classroom.overallFeedback.detailedFeedback && (
+                  classroom.overallFeedback.detailedFeedback.split('\n\n').map((para, idx) => (
+                    <p key={`fallback-${idx}`} className="text-slate-300 mb-4 leading-relaxed">{para}</p>
+                  ))
+                )}
               </div>
             </div>
           </div>

@@ -125,6 +125,23 @@ export const classroomService = {
     }
   },
 
+  getClassFeedback: async (classroomId) => {
+    try {
+      const res = await axios.get(`http://localhost:2452/api/feedback/evaluate/${classroomId}`,
+        {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        },
+);
+      // backend returns a String feedback (res.data)
+      return res.data;
+    } catch (err) {
+      console.error('getClassFeedback error', err);
+      // propagate
+      throw err;
+    }
+  },
+
   // Get classroom by class code
   getClassroomByCode: async (classCode) => {
     try {
