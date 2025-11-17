@@ -58,7 +58,7 @@ const ClassDetails = () => {
   // FEEDBACK specific states
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState(null);
-  const [feedbackText, setFeedbackText] = useState(null);
+  const [feedbackData, setFeedbackData] = useState(null);
   const [feedbackFetchedOnce, setFeedbackFetchedOnce] = useState(false);
 
   const navigate = useNavigate();
@@ -156,18 +156,21 @@ const ClassDetails = () => {
     setFeedbackError(null);
     try {
       const res = await classroomService.getClassFeedback(classroomId);
-      // backend is supposed to return a string (ai feedback)
-      // handle null/undefined
-      const text = typeof res === 'string' ? res.trim() : (res?.feedback || '');
-      setFeedbackText(text);
+      // backend returns structured feedback with strengths, detailedFeedback, and improvements
+      setFeedbackData(res);
       setFeedbackFetchedOnce(true);
 
-      // also fill into classroom.overallFeedback.detailedFeedback for display (optional)
+      // also update classroom.overallFeedback with structured data
       setClassroom(prev => ({
         ...prev,
         overallFeedback: {
           ...prev.overallFeedback,
-          detailedFeedback: text || prev.overallFeedback.detailedFeedback
+          performance: {
+            ...prev.overallFeedback.performance,
+            strengths: res.strengths || prev.overallFeedback.performance.strengths,
+            areasForImprovement: res.improvements || prev.overallFeedback.performance.areasForImprovement
+          },
+          detailedFeedback: res.detailedFeedback || prev.overallFeedback.detailedFeedback
         }
       }));
     } catch (err) {
@@ -505,119 +508,108 @@ const ClassDetails = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-              {/* Strengths */}
-              <div className="bg-slate-800 p-4 sm:p-6 rounded-lg">
-                <h3 className="text-base sm:text-lg font-semibold text-green-400 mb-3 sm:mb-4 flex items-center">
-                  <Target className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Key Strengths
-                </h3>
-                <ul className="space-y-2 sm:space-y-3">
-                  {classroom.overallFeedback.performance.strengths.map((strength, index) => (
-                    <li key={index} className="flex items-start">
-                      <CheckCircle className="h-5 w-5 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">{strength}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Areas for Improvement */}
-              <div className="bg-slate-800 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold text-yellow-400 mb-4 flex items-center">
-                  <Target className="mr-2 h-5 w-5" /> Areas for Improvement
-                </h3>
-                <ul className="space-y-3">
-                  {classroom.overallFeedback.performance.areasForImprovement.map((area, index) => (
-                    <li key={index} className="flex items-start">
-                      <AlertCircle className="h-5 w-5 text-yellow-400 mr-2 mt-0.5 flex-shrink-0" />
-                      <span className="text-slate-300">{area}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="bg-slate-800 p-6 rounded-lg mb-6">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold text-purple-400 flex items-center">
-                  <Lightbulb className="mr-2 h-5 w-5" /> Recommendations for Improvement
-                </h3>
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => fetchFeedback({ force: true })}
-                    className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded-md text-sm"
-                    disabled={feedbackLoading}
-                  >
-                    {feedbackLoading ? 'Generating...' : 'Regenerate AI Feedback'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                {classroom.overallFeedback.recommendations.map((recommendation, index) => (
-                  <div key={index} className="bg-slate-700 p-4 rounded-lg flex items-start">
-                    <div className="h-6 w-6 bg-purple-900 rounded-full flex items-center justify-center text-purple-400 mr-3 flex-shrink-0">
-                      {index + 1}
-                    </div>
-                    <p className="text-slate-300">{recommendation}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Detailed Written Feedback */}
+            {/* Generate Feedback Section */}
             <div className="bg-slate-800 p-6 rounded-lg">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-cyan-400 flex items-center">
-                  <MessageSquare className="mr-2 h-5 w-5" /> Detailed Feedback
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-cyan-400 mb-4 flex items-center justify-center">
+                  <MessageSquare className="mr-2 h-5 w-5" /> AI Performance Feedback
                 </h3>
+                
+                <p className="text-slate-400 mb-6">
+                  Get detailed AI-powered feedback on your classroom performance, including strengths, areas for improvement, and personalized recommendations.
+                </p>
 
-                {feedbackLoading && (
-                  <div className="text-sm text-slate-400">Fetching AI feedback...</div>
-                )}
-              </div>
-
-              <div className="prose prose-invert max-w-none">
-                {/* priority: show feedbackText if backend returned something,
-                    else show classroom.overallFeedback.detailedFeedback as fallback */}
                 {feedbackError && (
                   <div className="bg-rose-900/30 text-rose-300 p-3 rounded mb-4">
                     {feedbackError}
                   </div>
                 )}
 
-                {!feedbackLoading && !feedbackError && (!feedbackText || feedbackText.length === 0) && (
-                  <div className="bg-slate-700 p-4 rounded text-slate-300">
-                    <p className="mb-2">No AI feedback available yet.</p>
-                    <p className="text-sm text-slate-400">Attempt at least one assignment in this classroom to generate an AI evaluation.</p>
+                {!feedbackData && (
+                  <button
+                    onClick={() => fetchFeedback({ force: true })}
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={feedbackLoading}
+                  >
+                    {feedbackLoading ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                        Generating Feedback...
+                      </span>
+                    ) : (
+                      <span className="flex items-center">
+                        <Target className="mr-2 h-5 w-5" />
+                        Generate AI Feedback
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
 
-                    <div className="mt-4">
-                      <button
-                        onClick={() => fetchFeedback({ force: true })}
-                        className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-md"
-                      >
-                        Generate AI Feedback Now
-                      </button>
+            {/* Display Feedback Results */}
+            {!feedbackLoading && !feedbackError && feedbackData && (
+              <div className="space-y-6">
+                {/* Strengths Section */}
+                {feedbackData.strengths && feedbackData.strengths.length > 0 && (
+                  <div className="bg-slate-800 p-6 rounded-lg">
+                    <h4 className="text-base font-semibold text-green-400 mb-3 flex items-center">
+                      <CheckCircle className="mr-2 h-5 w-5" /> Strengths
+                    </h4>
+                    <ul className="space-y-2">
+                      {feedbackData.strengths.map((strength, index) => (
+                        <li key={index} className="flex items-start">
+                          <CheckCircle className="h-4 w-4 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
+                          <span className="text-slate-300">{strength}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Detailed Feedback Section */}
+                {feedbackData.detailedFeedback && (
+                  <div className="bg-slate-800 p-6 rounded-lg">
+                    <h4 className="text-base font-semibold text-cyan-400 mb-3 flex items-center">
+                      <MessageSquare className="mr-2 h-5 w-5" /> Detailed Analysis
+                    </h4>
+                    <div className="bg-slate-700 p-4 rounded-lg">
+                      {feedbackData.detailedFeedback.split('\n\n').map((para, idx) => (
+                        <p key={idx} className="text-slate-300 mb-3 leading-relaxed">{para}</p>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {!feedbackLoading && !feedbackError && feedbackText && feedbackText.length > 0 && (
-                  feedbackText.split('\n\n').map((para, idx) => (
-                    <p key={idx} className="text-slate-300 mb-4 leading-relaxed">{para}</p>
-                  ))
+                {/* Improvements Section */}
+                {feedbackData.improvements && feedbackData.improvements.length > 0 && (
+                  <div className="bg-slate-800 p-6 rounded-lg">
+                    <h4 className="text-base font-semibold text-yellow-400 mb-3 flex items-center">
+                      <AlertCircle className="mr-2 h-5 w-5" /> Areas for Improvement
+                    </h4>
+                    <ul className="space-y-2">
+                      {feedbackData.improvements.map((improvement, index) => (
+                        <li key={index} className="flex items-start">
+                          <AlertCircle className="h-4 w-4 text-yellow-400 mr-2 mt-0.5 flex-shrink-0" />
+                          <span className="text-slate-300">{improvement}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
 
-                {/* fallback: if no feedbackText but classroom has a prefilled detailedFeedback */}
-                {!feedbackLoading && !feedbackError && !feedbackText && classroom.overallFeedback.detailedFeedback && (
-                  classroom.overallFeedback.detailedFeedback.split('\n\n').map((para, idx) => (
-                    <p key={`fallback-${idx}`} className="text-slate-300 mb-4 leading-relaxed">{para}</p>
-                  ))
-                )}
+                {/* Regenerate Button */}
+                <div className="text-center">
+                  <button
+                    onClick={() => fetchFeedback({ force: true })}
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-md text-sm"
+                    disabled={feedbackLoading}
+                  >
+                    {feedbackLoading ? 'Regenerating...' : 'Regenerate Feedback'}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
