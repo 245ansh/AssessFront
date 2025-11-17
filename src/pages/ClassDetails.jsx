@@ -156,6 +156,7 @@ const ClassDetails = () => {
     setFeedbackError(null);
     try {
       const res = await classroomService.getClassFeedback(classroomId);
+      console.log(res);
       // backend returns structured feedback with strengths, detailedFeedback, and improvements
       setFeedbackData(res);
       setFeedbackFetchedOnce(true);
